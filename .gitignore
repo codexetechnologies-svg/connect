@@ -1,0 +1,12 @@
+node_modules
+.next
+.netlify
+out
+coverage
+playwright-report
+test-results
+npm-debug.log*
+.DS_Store
+.env*
+!.env.example
+netlify/functions/*.local.*
