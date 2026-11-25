@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Distributor dashboard — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <header class="mb-8">
+      <p class="page-eyebrow">Distributor portal</p>
+      <h1 class="page-title">Distributor dashboard</h1>
+      <p class="page-description">Review your catalogue and keep up with retailer enquiries.</p>
+    </header>
+
+    <p class="notice info">Email verification grants portal access but does not verify your Drug Licence or GST. Submit current documents in KYC for manual review; review does not replace statutory checks.</p>
+    <p class="notice error hidden mb-6" id="dashboard-error" role="alert"></p>
+    <section aria-label="Distributor overview" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">Active unique medicine SKUs</p>
+        <p class="mt-2 text-3xl font-black text-brand-navy" id="active-sku-count" aria-live="polite">Loading...</p>
+        <a class="mt-4 inline-flex text-sm font-semibold text-brand-navy" href="/supplier/catalogue.html">Manage catalogue</a>
+      </article>
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">New retailer enquiries</p>
+        <p class="mt-2 text-3xl font-black text-brand-navy" id="new-enquiry-count" aria-live="polite">Loading...</p>
+        <a class="mt-4 inline-flex text-sm font-semibold text-brand-navy" href="/supplier/enquiries.html">Review enquiries</a>
+      </article>
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">All retailer enquiries</p>
+        <p class="mt-2 text-3xl font-black text-brand-navy" id="total-enquiry-count" aria-live="polite">Loading...</p>
+        <a class="mt-4 inline-flex text-sm font-semibold text-brand-navy" href="/supplier/enquiries.html">Open lead pipeline</a>
+      </article>
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">Subscription status</p>
+        <p class="mt-2 font-bold text-brand-navy" id="subscription-status" aria-live="polite">Loading...</p>
+        <p class="mt-2 text-sm text-slate-600" id="subscription-renewal"></p>
+        <a class="mt-3 inline-flex text-sm font-semibold text-brand-navy" href="/subscription-plans.html">Manage plan</a>
+      </article>
+    </section>
+
+    <section aria-label="Distributor account tasks" class="mt-8 grid gap-4 sm:grid-cols-2">
+      <article class="card p-6">
+        <p class="page-eyebrow">Account</p>
+        <h2 class="text-xl font-bold text-brand-navy">KYC documents</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-600">View and manage the verification documents for your account.</p>
+        <a class="btn btn-secondary mt-5" href="/kyc.html">Manage KYC</a>
+      </article>
+      <article class="card p-6">
+        <p class="page-eyebrow">Account</p>
+        <h2 class="text-xl font-bold text-brand-navy">Subscription plan</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-600">Review the plans available to your distributor account.</p>
+        <a class="btn btn-secondary mt-5" href="/subscription-plans.html">View plans</a>
+      </article>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/assets/app.js"></script>
+  <script>
+    const dashboardError = document.getElementById('dashboard-error');
+    const activeSkuCount = document.getElementById('active-sku-count');
+    const newEnquiryCount = document.getElementById('new-enquiry-count');
+    const totalEnquiryCount = document.getElementById('total-enquiry-count');
+    const subscriptionStatus = document.getElementById('subscription-status');
+    const subscriptionRenewal = document.getElementById('subscription-renewal');
+
+    function fetchList(path) {
+      return api(path).then((result) => {
+        if (!Array.isArray(result)) throw new Error('The server returned an invalid list.');
+        return result;
+      });
+    }
+
+    async function loadOverview() {
+      const [catalogueResult, enquiriesResult, subscriptionResult] = await Promise.allSettled([
+        fetchList('/api/supplier/catalogue'),
+        fetchList('/api/supplier/enquiries'),
+        api('/api/billing/subscription')
+      ]);
+      const errors = [];
+
+      if (catalogueResult.status === 'fulfilled') {
+        const activeListings = catalogueResult.value.filter((listing) => listing.isActive === true);
+        const activeSkus = new Set(activeListings.map((listing) => listing.medicineId));
+        activeSkuCount.textContent = String(activeSkus.size);
+      } else {
+        activeSkuCount.textContent = 'Unavailable';
+        errors.push(`Catalogue summary: ${catalogueResult.reason instanceof Error
+          ? catalogueResult.reason.message
+          : 'request failed.'}`);
+      }
+
+      if (enquiriesResult.status === 'fulfilled') {
+        newEnquiryCount.textContent = String(
+          enquiriesResult.value.filter((enquiry) => enquiry.status === 'new').length
+        );
+        totalEnquiryCount.textContent = String(enquiriesResult.value.length);
+      } else {
+        newEnquiryCount.textContent = 'Unavailable';
+        totalEnquiryCount.textContent = 'Unavailable';
+        errors.push(`Enquiry summary: ${enquiriesResult.reason instanceof Error
+          ? enquiriesResult.reason.message
+          : 'request failed.'}`);
+      }
+
+      if (subscriptionResult.status === 'fulfilled') {
+        const subscription = subscriptionResult.value;
+        if (subscription) {
+          subscriptionStatus.textContent = `${subscription.tier} · ${subscription.status}`;
+          const endDate = subscription.endDate ? fmtDate(subscription.endDate) : 'no expiry date';
+          const skuLimit = Number.isFinite(Number(subscription.skuLimit))
+            ? ` · plan limit ${Number(subscription.skuLimit).toLocaleString()} active SKUs`
+            : '';
+          subscriptionRenewal.textContent = `Ends ${endDate}${skuLimit}. Renewal is manual.`;
+        } else {
+          subscriptionStatus.textContent = 'No active subscription';
+          subscriptionRenewal.textContent = 'Choose a plan to see its active SKU limit.';
+        }
+      } else {
+        subscriptionStatus.textContent = 'Unavailable';
+        subscriptionRenewal.textContent = '';
+        errors.push(`Subscription summary: ${subscriptionResult.reason instanceof Error
+          ? subscriptionResult.reason.message
+          : 'request failed.'}`);
+      }
+
+      if (errors.length) {
+        dashboardError.textContent = errors.join(' ');
+        dashboardError.classList.remove('hidden');
+      }
+    }
+
+    loadOverview();
+  </script>
+</body>
+</html>

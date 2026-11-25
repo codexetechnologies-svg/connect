@@ -1,16 +1,27 @@
 import { expect, test } from '@playwright/test';
-import { authenticateAs } from './auth-session';
 
-test('reviews a KYC request and approves the remaining sample batch', async ({ page }) => {
-  await authenticateAs(page, 'admin');
+test('admin approval queue displays pending accounts and explains its scope', async ({ page }) => {
+  test.skip(!process.env.PLAYWRIGHT_TEST_DATABASE_URL, 'requires an isolated PostgreSQL test database');
   await page.goto('/admin/approvals');
 
-  await page.getByRole('button', { name: 'Review' }).first().click();
-  await expect(page.getByText('Review the submitted wholesale drug licence')).toBeVisible();
-  await page.getByRole('button', { name: 'Request documents' }).click();
-  await expect(page.locator('p[role="status"]')).toContainText('Documents requested from Asha Pharma');
+  await expect(page.getByRole('heading', { name: 'Pending account approvals' })).toBeVisible();
+  await expect(page.getByText(/does not verify a business licence or KYC documents/i)).toBeVisible();
+});
 
-  await page.getByRole('button', { name: 'Approve batch' }).click();
-  await expect(page.locator('p[role="status"]')).toContainText('2 sample accounts approved');
-  await expect(page.getByText('Pending in this sample').locator('xpath=..').getByText('0')).toBeVisible();
+test('empty approval queue uses the shared status icon', async ({ page }) => {
+  await page.route('**/api/auth/session', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ user: { fullName: 'Test Admin', role: 'admin' } })
+  }));
+  await page.route('**/api/admin/accounts/pending', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: '[]'
+  }));
+
+  await page.goto('/admin/approvals.html');
+
+  await expect(page.getByText('You’re all caught up')).toBeVisible();
+  await expect(page.locator('.approval-empty-icon .approval-status-svg')).toBeVisible();
 });

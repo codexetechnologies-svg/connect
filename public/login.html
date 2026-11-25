@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Sign in — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <main class="auth-page">
+    <div class="auth-shell">
+      <section class="auth-panel" aria-labelledby="auth-title">
+        <a class="brand auth-brand" href="/index.html" aria-label="The Connect Pharma home">
+          <img src="/assets/logo.png" alt="The Connect Pharma" />
+        </a>
+        <p class="auth-eyebrow">For your business</p>
+        <h1 id="auth-title">Sign in to your account</h1>
+        <p class="auth-description" id="auth-description">Use your approved Connect Pharma account to access your portal.</p>
+
+        <nav class="auth-tabs" aria-label="Account access">
+          <a id="login-tab" href="/login.html" aria-current="page">Log in</a>
+          <a id="signup-tab" href="/login.html?mode=signup">Create account</a>
+        </nav>
+
+        <section class="card mt-5 p-4" id="local-preview-panel" aria-label="Local role preview" hidden>
+          <p class="page-eyebrow">Local preview</p>
+          <p class="mt-1 text-sm text-slate-600">Read-only preview for this computer. Account changes are disabled.</p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button class="btn btn-secondary btn-sm" type="button" data-preview-role="supplier">Preview distributor</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-preview-role="medical_shop">Preview retailer</button>
+          </div>
+          <p class="notice error hidden mt-3" id="local-preview-error" role="alert"></p>
+        </section>
+
+        <section class="auth-view" id="login-view">
+          <form id="login-form" class="auth-form">
+            <label for="email">Email address
+              <input id="email" name="email" type="email" autocomplete="username" required maxlength="320" />
+            </label>
+            <label for="password">Password
+              <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024" />
+            </label>
+            <button class="btn btn-primary" type="submit">Sign in</button>
+          </form>
+          <p class="auth-switch-prompt">New to The Connect Pharma? <a href="/login.html?mode=signup">Create a B2B account</a></p>
+          <div class="auth-switch-prompt">
+            <a href="#password-reset" id="forgot-password-link">Forgot password?</a>
+            <span aria-hidden="true"> · </span>
+            <button class="link-button" id="resend-verification-toggle" type="button">Resend verification email</button>
+          </div>
+          <form id="resend-verification-form" class="auth-form" hidden>
+            <label for="resend-email">Email address
+              <input id="resend-email" name="email" type="email" autocomplete="email" required maxlength="320" />
+            </label>
+            <button class="btn btn-secondary" type="submit">Send verification email</button>
+          </form>
+          <form id="password-reset-form" class="auth-form" hidden>
+            <label for="reset-email">Email address
+              <input id="reset-email" name="email" type="email" autocomplete="email" required maxlength="320" />
+            </label>
+            <button class="btn btn-secondary" type="submit">Send password reset link</button>
+          </form>
+          <p class="notice error hidden" id="login-error" role="alert"></p>
+        </section>
+
+        <section class="auth-view" id="signup-view" hidden>
+          <form id="signup-form" class="auth-form">
+            <fieldset class="auth-role-fieldset">
+              <legend>Choose your account type</legend>
+              <div class="auth-role-options">
+                <label class="auth-role-option">
+                  <input type="radio" name="role" value="medical_shop" required checked />
+                  <span class="auth-role-copy">
+                    <strong>Retailer</strong>
+                    <span>Medical shop</span>
+                  </span>
+                </label>
+                <label class="auth-role-option">
+                  <input type="radio" name="role" value="supplier" required />
+                  <span class="auth-role-copy">
+                    <strong>Distributor</strong>
+                    <span>Pharmaceutical supplier</span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+            <label for="signup-name">Your name
+              <input id="signup-name" name="fullName" type="text" autocomplete="name" required minlength="2" maxlength="120" />
+            </label>
+            <label for="signup-email">Email address
+              <input id="signup-email" name="email" type="email" autocomplete="email" required maxlength="320" />
+            </label>
+            <label for="signup-phone">Mobile number <span class="auth-optional">(optional)</span>
+              <input id="signup-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="+91 98765 43210" />
+            </label>
+            <label for="signup-password">Create password
+              <input id="signup-password" name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="1024" />
+              <span class="auth-field-hint">Use at least 8 characters.</span>
+            </label>
+            <label class="auth-consent">
+              <input name="consent" type="checkbox" required />
+              <span>I agree to the <a href="/terms.html" target="_blank" rel="noopener noreferrer">Terms of Use</a> and <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</span>
+            </label>
+            <button class="btn btn-primary" type="submit">Create account</button>
+          </form>
+          <p class="auth-switch-prompt">B2B accounts only. Email verification provides portal access; submit current business credentials for separate admin review before regulated trade. <a href="/terms.html">Read the business terms</a>.</p>
+          <p class="notice error hidden" id="signup-error" role="alert"></p>
+        </section>
+
+        <section class="auth-view" id="password-update-view" hidden>
+          <form id="password-update-form" class="auth-form">
+            <label for="new-password">New password
+              <input id="new-password" name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="1024" />
+            </label>
+            <label for="confirm-password">Confirm new password
+              <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="1024" />
+            </label>
+            <button class="btn btn-primary" type="submit">Update password</button>
+          </form>
+        </section>
+
+        <p class="notice hidden" id="auth-notice" role="status" aria-live="polite"></p>
+        <a class="auth-home-link" href="/index.html">Back to home</a>
+      </section>
+
+      <aside class="auth-feature-panel" aria-labelledby="auth-feature-title">
+        <div class="auth-feature-content">
+          <p class="auth-feature-eyebrow">Connect Pharma</p>
+          <h2 id="auth-feature-title">A better way to connect your pharmacy business.</h2>
+          <p class="auth-feature-description">Find products, compare suppliers, and keep your sourcing conversations together.</p>
+          <div class="auth-feature-grid">
+            <article class="auth-feature-card">
+              <span class="auth-feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8" /><path d="m16 16 4.5 4.5M8 10.8h5.6M10.8 8v5.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+              </span>
+              <h3>Compare clearly</h3>
+              <p>Review medicine details and supplier offers in one place.</p>
+            </article>
+            <article class="auth-feature-card">
+              <span class="auth-feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V8l8-4 8 4v12M8 20v-6h8v6M8 9h.01M16 9h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </span>
+              <h3>Find suppliers</h3>
+              <p>Explore supplier locations, stock, and delivery coverage.</p>
+            </article>
+            <article class="auth-feature-card">
+              <span class="auth-feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v11H8l-4 3V5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /><path d="M8 9h8M8 12h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+              </span>
+              <h3>Stay connected</h3>
+              <p>Keep business enquiries and supplier responses together.</p>
+            </article>
+          </div>
+          <p class="auth-feature-footnote">Verify your email to enable retailer or distributor portal access.</p>
+        </div>
+      </aside>
+    </div>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+    const form = document.getElementById('login-form');
+    const signupForm = document.getElementById('signup-form');
+    const errorBox = document.getElementById('login-error');
+    const signupError = document.getElementById('signup-error');
+    const authNotice = document.getElementById('auth-notice');
+    const resendForm = document.getElementById('resend-verification-form');
+    const resetForm = document.getElementById('password-reset-form');
+    const passwordUpdateForm = document.getElementById('password-update-form');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const signupButton = signupForm.querySelector('button[type="submit"]');
+    const loginTab = document.getElementById('login-tab');
+    const signupTab = document.getElementById('signup-tab');
+    const authTabs = document.querySelector('.auth-tabs');
+    let recoveryAccessToken = '';
+    const previewPanel = document.getElementById('local-preview-panel');
+    const previewError = document.getElementById('local-preview-error');
+    const query = new URLSearchParams(location.search);
+    const returnTo = query.get('returnTo');
+
+    if (returnTo) {
+      loginTab.href = `/login.html?returnTo=${encodeURIComponent(returnTo)}`;
+      signupTab.href = `/login.html?mode=signup&returnTo=${encodeURIComponent(returnTo)}`;
+      document.querySelector('#signup-view .auth-switch-prompt a').href = loginTab.href;
+    }
+
+    function setMode(mode) {
+      const isSignup = mode === 'signup';
+      const isPasswordReset = mode === 'reset-password';
+      document.querySelector('.auth-page').classList.toggle('is-signup', isSignup);
+      document.getElementById('login-view').hidden = isSignup || isPasswordReset;
+      document.getElementById('signup-view').hidden = !isSignup;
+      document.getElementById('password-update-view').hidden = !isPasswordReset;
+      authTabs.hidden = isPasswordReset;
+      document.getElementById('auth-title').textContent = isSignup
+        ? 'Create your account'
+        : isPasswordReset
+          ? 'Choose a new password'
+          : 'Sign in to your account';
+      document.getElementById('auth-description').textContent = isSignup
+        ? 'Choose how you use Connect Pharma. Verify your email to enable portal access.'
+        : isPasswordReset
+          ? 'Enter a new password to finish resetting your account.'
+          : 'Use your approved Connect Pharma account to access your portal.';
+      loginTab.setAttribute('aria-current', isSignup ? 'false' : 'page');
+      signupTab.setAttribute('aria-current', isSignup ? 'page' : 'false');
+      document.title = `${isSignup ? 'Create account' : isPasswordReset ? 'Reset password' : 'Sign in'} — Connect Pharma`;
+    }
+
+    const requestedRole = query.get('role');
+    if (requestedRole === 'supplier' || requestedRole === 'medical_shop') {
+      signupForm.elements.role.value = requestedRole;
+    }
+    const roleOptions = signupForm.querySelectorAll('.auth-role-option');
+    const updateRoleSelection = () => {
+      roleOptions.forEach((option) => {
+        option.classList.toggle('is-selected', option.querySelector('input').checked);
+      });
+    };
+    signupForm.querySelectorAll('input[name="role"]').forEach((input) => {
+      input.addEventListener('change', updateRoleSelection);
+    });
+    updateRoleSelection();
+    setMode(query.get('mode'));
+
+    function showNotice(message, type) {
+      authNotice.textContent = message;
+      authNotice.className = `notice ${type}`;
+    }
+
+    async function showLocalPreviewOption() {
+      try {
+        const response = await fetch('/api/config', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error(`Preview availability check failed (${response.status}).`);
+        const config = await response.json();
+        previewPanel.hidden = config.localRolePreview !== true;
+      } catch (error) {
+        console.warn('Could not check local preview availability:', error);
+      }
+    }
+
+    previewPanel.querySelectorAll('[data-preview-role]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        previewError.textContent = '';
+        previewError.classList.add('hidden');
+        previewPanel.querySelectorAll('button').forEach((item) => { item.disabled = true; });
+        try {
+          const response = await fetch('/api/auth/preview', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: button.dataset.previewRole })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || `Preview could not be opened (${response.status}).`);
+          const dashboardPath = window.dashboardForRole(result.user?.role);
+          if (!dashboardPath) throw new Error('The preview role is not recognized.');
+          window.cacheSessionRole(result.user.role);
+          location.assign(dashboardPath);
+        } catch (error) {
+          previewError.textContent = error instanceof Error ? error.message : 'Could not open the local preview.';
+          previewError.classList.remove('hidden');
+        } finally {
+          previewPanel.querySelectorAll('button').forEach((item) => { item.disabled = false; });
+        }
+      });
+    });
+
+    showLocalPreviewOption();
+
+    document.getElementById('forgot-password-link').addEventListener('click', (event) => {
+      event.preventDefault();
+      resetForm.hidden = !resetForm.hidden;
+      resendForm.hidden = true;
+      resetForm.elements.email.value = form.elements.email.value;
+      authNotice.classList.add('hidden');
+    });
+
+    document.getElementById('resend-verification-toggle').addEventListener('click', () => {
+      resendForm.hidden = !resendForm.hidden;
+      resetForm.hidden = true;
+      resendForm.elements.email.value = form.elements.email.value;
+      authNotice.classList.add('hidden');
+    });
+
+    resendForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = resendForm.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/auth/resend-verification', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: resendForm.elements.email.value })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `Email could not be sent (${response.status}).`);
+        resendForm.hidden = true;
+        showNotice(result.message, 'ok');
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : 'The verification email could not be sent.', 'error');
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    resetForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = resetForm.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/auth/password-reset', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: resetForm.elements.email.value })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `Reset email could not be sent (${response.status}).`);
+        resetForm.hidden = true;
+        showNotice(result.message, 'ok');
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : 'The password reset email could not be sent.', 'error');
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    passwordUpdateForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const password = passwordUpdateForm.elements.password.value;
+      if (password !== passwordUpdateForm.elements.confirmPassword.value) {
+        showNotice('The passwords do not match.', 'error');
+        return;
+      }
+      const button = passwordUpdateForm.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/auth/update-password', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: recoveryAccessToken, password })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `Password could not be updated (${response.status}).`);
+        recoveryAccessToken = '';
+        history.replaceState(null, '', location.pathname);
+        setMode('login');
+        showNotice(result.message, 'ok');
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : 'Your password could not be updated.', 'error');
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      errorBox.textContent = '';
+      errorBox.classList.add('hidden');
+      submitButton.disabled = true;
+
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: form.elements.email.value,
+            password: form.elements.password.value
+          })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `Sign in failed (${response.status}).`);
+
+        const role = result.user?.role;
+        const dashboardPath = window.dashboardForRole(role);
+        if (!dashboardPath) throw new Error('Your account role could not be determined. Contact support.');
+        window.cacheSessionRole(role);
+
+        const requestedPath = new URLSearchParams(location.search).get('returnTo');
+        const requestedUrl = requestedPath ? new URL(requestedPath, location.origin) : null;
+        const requestedRole = requestedUrl?.pathname.startsWith('/admin/')
+          ? 'admin'
+          : requestedUrl?.pathname.startsWith('/supplier/')
+            ? 'supplier'
+            : requestedUrl?.pathname.startsWith('/medical-shop/')
+              ? 'medical_shop'
+              : null;
+        const safeReturnTo = requestedUrl?.origin === location.origin &&
+          (!requestedRole || requestedRole === role)
+          ? `${requestedUrl.pathname}${requestedUrl.search}${requestedUrl.hash}`
+          : dashboardPath;
+        location.assign(safeReturnTo);
+      } catch (error) {
+        errorBox.textContent = error instanceof Error ? error.message : 'Sign in failed. Please try again.';
+        errorBox.classList.remove('hidden');
+      } finally {
+        submitButton.disabled = false;
+      }
+    });
+
+    signupForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      signupError.textContent = '';
+      signupError.classList.add('hidden');
+      signupButton.disabled = true;
+      authNotice.classList.add('hidden');
+
+      try {
+        const response = await fetch('/api/auth/signup', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: signupForm.elements.fullName.value,
+            email: signupForm.elements.email.value,
+            phone: signupForm.elements.phone.value,
+            password: signupForm.elements.password.value,
+            role: signupForm.elements.role.value,
+            consentAccepted: signupForm.elements.consent.checked
+          })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `Sign-up failed (${response.status}).`);
+        signupForm.hidden = true;
+        showNotice(result.message, 'ok');
+      } catch (error) {
+        signupError.textContent = error instanceof Error ? error.message : 'Could not create your account. Please try again.';
+        signupError.classList.remove('hidden');
+      } finally {
+        signupButton.disabled = false;
+      }
+    });
+
+    async function handleAuthEmailCallback() {
+      const hash = new URLSearchParams(location.hash.slice(1));
+      const accessToken = hash.get('access_token');
+      const type = hash.get('type');
+      if (!accessToken) {
+        if (query.get('mode') === 'reset-password') {
+          setMode('login');
+          showNotice('This password reset link is invalid or expired. Request a new one.', 'error');
+        }
+        return;
+      }
+
+      if (type === 'recovery') {
+        recoveryAccessToken = accessToken;
+        history.replaceState(null, '', location.pathname);
+        setMode('reset-password');
+        return;
+      }
+      if (type !== 'signup') return;
+
+      history.replaceState(null, '', `${location.pathname}${location.search}`);
+      setMode('login');
+      try {
+        const response = await fetch('/api/auth/confirm-email', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Email verification could not be completed.');
+        showNotice('Email verified. You can sign in if your account is active.', 'ok');
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : 'Email verification could not be completed.', 'error');
+      }
+    }
+
+    handleAuthEmailCallback();
+  </script>
+</body>
+</html>

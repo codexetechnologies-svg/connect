@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Supplier map — Connect Pharma</title>
+<link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+<div id="site-header"></div>
+<main class="container page-shell">
+  <header class="map-page-header">
+    <div>
+      <p class="page-eyebrow">Supplier network</p>
+      <h1 class="page-title">Supplier coverage map</h1>
+      <p class="page-description">Compare supplier distance, stock availability, and delivery coverage around your shop.</p>
+    </div>
+    <div class="map-shop-summary">
+      <span class="map-shop-marker" aria-hidden="true">S</span>
+      <span><span class="map-shop-label">Shop location · sample</span><strong>Madurai City</strong></span>
+    </div>
+  </header>
+  <section class="map-layout" aria-label="Supplier coverage">
+    <div class="map-column">
+      <div class="map-panel-heading">
+        <div>
+          <h2>Coverage map</h2>
+          <p>Approximate distances from your shop</p>
+        </div>
+        <div class="map-legend" aria-label="Map legend">
+          <span><i class="legend-dot shop"></i>Shop</span>
+          <span><i class="legend-dot available"></i>In stock</span>
+          <span><i class="legend-dot limited"></i>Low stock</span>
+        </div>
+      </div>
+      <div class="card map-box p-0">
+        <div id="gmap" class="h-full w-full" aria-label="Google map of supplier locations"></div>
+        <button id="fit-all" class="btn btn-secondary btn-sm" type="button" disabled>Fit all suppliers</button>
+        <div id="map-status" class="map-status" aria-live="polite">
+          <div class="map-status-card">
+            <span class="map-status-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M20 10.2c0 5.2-8 11.3-8 11.3S4 15.4 4 10.2a8 8 0 1 1 16 0Z" stroke="currentColor" stroke-width="1.7" />
+                <circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="1.7" />
+              </svg>
+            </span>
+            <div>
+              <h2 id="map-status-title">Loading coverage map…</h2>
+              <p id="map-status-body"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="map-sidebar" aria-label="Supplier locations">
+      <div class="map-sidebar-heading">
+        <div>
+          <h2>Nearby suppliers</h2>
+          <p>Distance and delivery coverage</p>
+        </div>
+        <span class="badge blue" id="supplier-count">0 suppliers</span>
+      </div>
+      <div class="supplier-list" id="supplier-list"></div>
+    </aside>
+  </section>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+const shopLocation = { lat: 9.9252, lng: 78.1198 };
+const statusEl = document.getElementById('map-status');
+const statusTitle = document.getElementById('map-status-title');
+const statusBody = document.getElementById('map-status-body');
+const listEl = document.getElementById('supplier-list');
+let suppliers = [];
+let map, markers = [], infoWindow, bounds;
+
+function distanceKm(a, b) {
+  const R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(s)) * 10) / 10;
+}
+
+function stockBadge(stock) {
+  const cls = stock === 'In Stock' ? 'green' : stock === 'Low Stock' ? 'amber' : 'red';
+  return `<span class="badge ${cls}">${esc(stock)}</span>`;
+}
+
+function renderList() {
+  document.getElementById('supplier-count').textContent = `${suppliers.length} ${suppliers.length === 1 ? 'supplier' : 'suppliers'}`;
+  if (!suppliers.length) {
+    listEl.innerHTML = '<div class="supplier-empty"><p>No supplier locations are available yet.</p><span>Check back when suppliers add their coverage areas.</span></div>';
+    return;
+  }
+  listEl.innerHTML = suppliers.map(s => `
+    <button type="button" class="supplier-card" data-id="${esc(s.id)}">
+      <span class="supplier-card-heading">
+        <span class="supplier-identity"><span class="supplier-name">${esc(s.name)}</span>
+        <span class="supplier-city">${esc(s.city)}</span></span>
+        ${stockBadge(s.stock)}
+      </span>
+      <span class="supplier-card-metrics">
+        <span><span class="supplier-metric-label">Distance</span><strong>${distanceKm(shopLocation, s.coordinates)} km</strong></span>
+        <span><span class="supplier-metric-label">Delivery radius</span><strong>${s.deliveryRadiusKm} km</strong></span>
+      </span>
+    </button>`).join('');
+  listEl.querySelectorAll('.supplier-card').forEach(card => {
+    card.addEventListener('click', () => focusSupplier(card.dataset.id));
+  });
+}
+
+function focusSupplier(id) {
+  const s = suppliers.find(x => x.id === id);
+  const marker = markers.find(m => m.id === id);
+  if (!map || !s || !marker) return;
+  document.querySelectorAll('.supplier-card').forEach(c => c.classList.toggle('selected', c.dataset.id === id));
+  map.panTo(s.coordinates);
+  map.setZoom(13);
+  infoWindow.setContent(`<strong>${esc(s.name)}</strong><br><span style="font-size:12px;color:#475569">${esc(s.city)} · ${distanceKm(shopLocation, s.coordinates)} km · ${esc(s.stock)}</span>`);
+  infoWindow.open({ map, anchor: marker.marker });
+}
+
+async function init() {
+  try {
+    const [{ googleMapsApiKey }, data] = await Promise.all([
+      api('/api/config'), api('/api/map/suppliers')
+    ]);
+    suppliers = data;
+    renderList();
+
+    if (!googleMapsApiKey) {
+      statusTitle.textContent = 'Map preview is not configured';
+      statusBody.innerHTML = 'Set <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> on the server to display supplier pins. Distances and coverage remain available in the supplier list.';
+      return;
+    }
+
+    const loader = document.createElement('script');
+    loader.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(googleMapsApiKey)}&v=weekly`;
+    loader.async = true;
+    loader.onload = () => {
+      map = new google.maps.Map(document.getElementById('gmap'), {
+        center: shopLocation, zoom: 8,
+        mapTypeControl: false, streetViewControl: false, fullscreenControl: true, zoomControl: true
+      });
+      infoWindow = new google.maps.InfoWindow();
+      bounds = new google.maps.LatLngBounds();
+      bounds.extend(shopLocation);
+      new google.maps.Marker({ map, position: shopLocation, title: 'Example medical shop · Madurai',
+        label: { text: 'S', color: '#fff', fontWeight: '700' } });
+      suppliers.forEach(s => {
+        const color = s.stock === 'Out of Stock' ? '#DC2626' : s.stock === 'Low Stock' ? '#D97706' : '#16A34A';
+        const marker = new google.maps.Marker({
+          map, position: s.coordinates, title: s.name,
+          icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2, scale: 9 }
+        });
+        marker.addListener('click', () => {
+          document.querySelectorAll('.supplier-card').forEach(c => c.classList.toggle('selected', c.dataset.id === s.id));
+          infoWindow.setContent(`<strong>${esc(s.name)}</strong><br><span style="font-size:12px;color:#475569">${esc(s.city)} · ${distanceKm(shopLocation, s.coordinates)} km · ${esc(s.stock)}</span>`);
+          infoWindow.open({ map, anchor: marker });
+        });
+        markers.push({ id: s.id, marker });
+        bounds.extend(s.coordinates);
+        new google.maps.Circle({ map, center: s.coordinates, radius: s.deliveryRadiusKm * 1000,
+          fillColor: color, fillOpacity: 0.07, strokeColor: color, strokeOpacity: 0.35, strokeWeight: 1, clickable: false });
+      });
+      map.fitBounds(bounds, 56);
+      statusEl.classList.add('hidden');
+      document.getElementById('fit-all').disabled = false;
+    };
+    loader.onerror = () => {
+      statusTitle.textContent = 'Could not load the map';
+      statusBody.textContent = 'Check the Google Maps API key and billing configuration. Supplier details remain available in the list.';
+    };
+    document.head.appendChild(loader);
+  } catch (e) {
+    console.error(e);
+    statusTitle.textContent = 'Map data unavailable';
+    statusBody.textContent = 'Could not load suppliers. Check the database connection.';
+  }
+}
+
+document.getElementById('fit-all').addEventListener('click', () => {
+  if (map && bounds) { infoWindow.close(); map.fitBounds(bounds, 56); }
+});
+init();
+</script>
+</body>
+</html>

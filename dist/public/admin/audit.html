@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Admin audit log — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <header class="mb-6">
+      <p class="page-eyebrow">Admin controls</p>
+      <h1 class="page-title">Admin audit log</h1>
+      <p class="page-description">Recent account, KYC, plan, and payment events. Up to 100 latest entries are shown.</p>
+    </header>
+    <section class="grid gap-4" id="audit-entries" aria-live="polite">
+      <p class="text-sm text-slate-500">Loading audit history…</p>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/assets/app.js"></script>
+  <script>
+    const auditEl = document.getElementById('audit-entries');
+
+    function renderEntries(entries) {
+      if (!entries.length) {
+        auditEl.innerHTML = '<div class="card p-6"><p class="text-sm text-slate-600">No audit entries yet.</p></div>';
+        return;
+      }
+      auditEl.innerHTML = entries.map((entry) => `
+        <article class="card p-5">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="font-semibold text-slate-900">${esc(entry.actionType.replaceAll('.', ' '))}</h2>
+              <p class="mt-1 text-sm text-slate-600">${esc(entry.actorName || 'System')} · ${esc(entry.entityType)}${entry.entityId ? ` · ${esc(entry.entityId)}` : ''}</p>
+            </div>
+            <time class="text-xs text-slate-500">${esc(fmtDateTime(entry.createdAt))}</time>
+          </div>
+          ${entry.details?.reason ? `<p class="mt-3 text-sm text-slate-700">Reason: ${esc(entry.details.reason)}</p>` : ''}
+          ${entry.details?.tier ? `<p class="mt-2 text-sm text-slate-600">Plan: ${esc(entry.details.tier)}</p>` : ''}
+          ${entry.details?.amount !== undefined ? `<p class="mt-2 text-sm text-slate-600">Amount: ${esc(entry.details.amount)} ${esc(entry.details.currency || 'INR')}</p>` : ''}
+        </article>`).join('');
+    }
+
+    (async () => {
+      try {
+        renderEntries(await api('/api/admin/audit-logs'));
+      } catch (error) {
+        console.error('Could not load admin audit history:', error);
+        auditEl.innerHTML = '<p class="text-sm text-red-700">Could not load audit history. Refresh to try again.</p>';
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Approvals — Connect Pharma</title>
+<link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+<div id="site-header"></div>
+<main class="container page-shell">
+  <header class="admin-page-header">
+    <p class="page-eyebrow">Admin controls</p>
+    <h1 class="page-title">Pending account approvals</h1>
+    <p class="page-description">New retailer and distributor accounts are activated after email verification. This queue is for existing pending accounts; it does not verify a business licence or KYC documents.</p>
+  </header>
+  <p class="notice info hidden" id="status" role="status"></p>
+  <section class="approval-summary">
+    <div class="approval-count-card">
+      <span class="approval-count-icon" aria-hidden="true"><svg class="approval-status-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg></span>
+      <span><span class="approval-count-label">Pending review</span><strong id="pending-count">–</strong></span>
+    </div>
+    <div class="approval-guidance">
+      <strong>Before approving</strong>
+      <span>Confirm the details and enter a reason. Only email-verified pending accounts can be manually approved.</span>
+    </div>
+  </section>
+  <section class="approval-panel">
+    <div class="approval-panel-heading">
+      <div><h2>Account review queue</h2><p>Each approval is saved to the admin audit log.</p></div>
+    </div>
+    <div id="list"></div>
+  </section>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+const listEl = document.getElementById('list');
+const statusEl = document.getElementById('status');
+
+function roleLabel(role) { return role === 'medical_shop' ? 'Medical shop' : role === 'admin' ? 'Admin' : 'Supplier'; }
+
+function render(accounts) {
+  document.getElementById('pending-count').textContent = accounts.length;
+  if (!accounts.length) {
+    listEl.innerHTML = `<div class="approval-empty"><span class="approval-empty-icon" aria-hidden="true">${window.iconMarkup('circleCheck', 'approval-status-svg')}</span><strong>You’re all caught up</strong><span>There are no pending accounts.</span></div>`;
+    return;
+  }
+  listEl.innerHTML = `<ul class="approval-list">${accounts.map(a => `
+    <li class="approval-row">
+      <div class="approval-identity">
+        <span class="approval-avatar" aria-hidden="true">${esc(a.fullName.trim().charAt(0).toUpperCase())}</span>
+        <div class="approval-person">
+          <p class="account-name">${esc(a.fullName)}</p>
+          <p class="account-email">${esc(a.email)}</p>
+          <div class="approval-meta">
+            <span class="badge blue">${roleLabel(a.role)}</span>
+            <span class="approval-date">Registered ${fmtDate(a.createdAt)}</span>
+            ${a.emailVerified ? '<span class="badge green">Email verified</span>' : '<span class="badge amber">Email verification needed</span>'}
+          </div>
+        </div>
+      </div>
+      ${a.emailVerified
+        ? `<form class="account-approval" data-account-id="${esc(a.id)}">
+            <label>Approval reason
+              <input name="reason" type="text" maxlength="500" required placeholder="Required for audit history" />
+            </label>
+            <button class="btn btn-success" type="submit">Approve account <span aria-hidden="true">→</span></button>
+          </form>`
+        : '<span class="text-sm text-slate-500">Waiting for email verification</span>'}
+    </li>`).join('')}</ul>`;
+  listEl.querySelectorAll('.account-approval').forEach(form => form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const reason = form.elements.reason.value.trim();
+    if (!reason) {
+      statusEl.textContent = 'Provide an approval reason before approving this account.';
+      statusEl.className = 'notice error';
+      form.elements.reason.focus();
+      return;
+    }
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const result = await api(`/api/admin/accounts/${form.dataset.accountId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      });
+      statusEl.textContent = result.approved ? 'Account access approved.' : 'That account could not be approved.';
+      statusEl.className = 'notice ' + (result.approved ? 'ok' : 'error');
+    } catch (e) {
+      statusEl.textContent = e instanceof Error ? e.message : 'Approval failed. Please try again.';
+      statusEl.className = 'notice error';
+    } finally {
+      button.disabled = false;
+      load();
+    }
+  }));
+}
+
+async function load() {
+  listEl.innerHTML = '<div class="approval-empty">Loading account queue…</div>';
+  try { render(await api('/api/admin/accounts/pending')); }
+  catch (e) {
+    console.error(e);
+    listEl.innerHTML = '<div class="accounts-empty accounts-error"><strong>Could not load approvals</strong><span>Refresh to try again.</span></div>';
+  }
+}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Subscription plans — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <header class="mb-6">
+      <p class="page-eyebrow">Plan management</p>
+      <h1 class="page-title">Subscription plans</h1>
+      <p class="page-description">Create and update plans available to suppliers and medical shops. Deactivated plans remain attached to existing subscriptions.</p>
+    </header>
+    <p class="notice info" role="note">Plan changes apply to new checkouts. Billing is unavailable until Cashfree is configured.</p>
+    <p class="notice hidden" id="plan-status" role="status"></p>
+
+    <section class="card mb-8 p-6">
+      <h2 class="text-xl font-bold text-brand-navy" id="form-title">Create a plan</h2>
+      <form class="mt-5 grid gap-4 md:grid-cols-2" id="plan-form">
+        <input id="plan-id" name="id" type="hidden" />
+        <label class="text-sm font-semibold text-slate-700" for="tier">Plan name
+          <input class="mt-1 w-full" id="tier" name="tier" required maxlength="50" />
+        </label>
+        <label class="text-sm font-semibold text-slate-700" for="sku-limit">SKU limit
+          <input class="mt-1 w-full" id="sku-limit" name="skuLimit" type="number" min="1" max="1000000" required />
+        </label>
+        <label class="text-sm font-semibold text-slate-700" for="monthly-fee">Monthly fee (INR)
+          <input class="mt-1 w-full" id="monthly-fee" name="monthlyFee" type="number" min="0" max="10000000" step="0.01" required />
+        </label>
+        <label class="text-sm font-semibold text-slate-700" for="features">Features (one per line)
+          <textarea class="mt-1 w-full" id="features" name="features" rows="4" maxlength="5000"></textarea>
+        </label>
+        <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <input id="is-active" name="isActive" type="checkbox" checked />
+          Available for new checkouts
+        </label>
+        <div class="flex flex-wrap gap-3 md:col-span-2">
+          <button class="btn btn-primary" id="save-plan" type="submit">Create plan</button>
+          <button class="btn btn-secondary hidden" id="cancel-edit" type="button">Cancel edit</button>
+        </div>
+      </form>
+    </section>
+
+    <section aria-label="Subscription plans" class="grid gap-6 md:grid-cols-2 xl:grid-cols-3" id="plans">
+      <p class="text-sm text-slate-500">Loading plans…</p>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/assets/app.js"></script>
+  <script>
+    const form = document.getElementById('plan-form');
+    const plansEl = document.getElementById('plans');
+    const statusEl = document.getElementById('plan-status');
+    const saveButton = document.getElementById('save-plan');
+    const cancelButton = document.getElementById('cancel-edit');
+    let plans = [];
+
+    function planFeatures(plan) {
+      if (Array.isArray(plan.features)) return plan.features;
+      if (typeof plan.features === 'string') {
+        try {
+          const parsed = JSON.parse(plan.features);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch { return []; }
+      }
+      return [];
+    }
+
+    function showStatus(message, success) {
+      statusEl.textContent = message;
+      statusEl.className = `notice ${success ? 'ok' : 'error'}`;
+    }
+
+    function resetForm() {
+      form.reset();
+      document.getElementById('plan-id').value = '';
+      document.getElementById('is-active').checked = true;
+      document.getElementById('form-title').textContent = 'Create a plan';
+      saveButton.textContent = 'Create plan';
+      cancelButton.classList.add('hidden');
+    }
+
+    function editPlan(plan) {
+      document.getElementById('plan-id').value = plan.id;
+      document.getElementById('tier').value = plan.tier;
+      document.getElementById('sku-limit').value = plan.skuLimit;
+      document.getElementById('monthly-fee').value = plan.monthlyFee;
+      document.getElementById('features').value = planFeatures(plan).join('\n');
+      document.getElementById('is-active').checked = plan.isActive;
+      document.getElementById('form-title').textContent = `Edit ${plan.tier}`;
+      saveButton.textContent = 'Save changes';
+      cancelButton.classList.remove('hidden');
+      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function renderPlans() {
+      if (!plans.length) {
+        plansEl.innerHTML = '<p class="text-sm text-slate-600">No plans yet. Create the first plan above.</p>';
+        return;
+      }
+      plansEl.innerHTML = plans.map((plan) => `
+        <article class="card flex flex-col p-6">
+          <div class="flex items-start justify-between gap-3">
+            <h2 class="text-xl font-bold text-brand-navy">${esc(plan.tier)}</h2>
+            <span class="badge ${plan.isActive ? 'green' : ''}">${plan.isActive ? 'Active' : 'Inactive'}</span>
+          </div>
+          <p class="mt-3 text-3xl font-black text-slate-900">₹${Number(plan.monthlyFee).toLocaleString('en-IN')}<span class="text-sm font-medium text-slate-500"> / month</span></p>
+          <p class="mt-1 text-sm text-slate-500">Up to ${Number(plan.skuLimit).toLocaleString('en-IN')} SKUs</p>
+          <ul class="mt-4 flex-1 space-y-2 text-sm text-slate-600">
+            ${planFeatures(plan).map((feature) => `<li>• ${esc(feature)}</li>`).join('')}
+          </ul>
+          <button class="btn btn-secondary mt-6" data-edit="${esc(plan.id)}" type="button">Edit plan</button>
+        </article>`).join('');
+      plansEl.querySelectorAll('[data-edit]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const plan = plans.find((item) => item.id === button.dataset.edit);
+          if (plan) editPlan(plan);
+        });
+      });
+    }
+
+    async function loadPlans() {
+      try {
+        plans = await api('/api/admin/subscriptions');
+        renderPlans();
+      } catch (error) {
+        console.error('Could not load subscription plans:', error);
+        plansEl.innerHTML = '<p class="text-sm text-red-700">Could not load plans. Refresh to try again.</p>';
+      }
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      saveButton.disabled = true;
+      statusEl.classList.add('hidden');
+      const id = document.getElementById('plan-id').value;
+      const body = {
+        tier: document.getElementById('tier').value,
+        skuLimit: Number(document.getElementById('sku-limit').value),
+        monthlyFee: Number(document.getElementById('monthly-fee').value),
+        features: document.getElementById('features').value.split('\n').map((feature) => feature.trim()).filter(Boolean),
+        isActive: document.getElementById('is-active').checked
+      };
+      try {
+        await api(id ? `/api/admin/subscriptions/${encodeURIComponent(id)}` : '/api/admin/subscriptions', {
+          method: id ? 'PUT' : 'POST',
+          body: JSON.stringify(body)
+        });
+        showStatus(id ? 'Plan updated.' : 'Plan created.', true);
+        resetForm();
+        await loadPlans();
+      } catch (error) {
+        showStatus(error instanceof Error ? error.message : 'Could not save the plan.', false);
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+
+    cancelButton.addEventListener('click', resetForm);
+    loadPlans();
+  </script>
+</body>
+</html>

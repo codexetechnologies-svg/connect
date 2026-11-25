@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Admin dashboard — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p class="page-eyebrow">Admin portal</p>
+        <h1 class="page-title">Platform overview</h1>
+        <p class="page-description">Review account activity and jump to the tools you manage.</p>
+      </div>
+      <button class="btn btn-secondary" id="refresh" type="button">Refresh overview</button>
+    </header>
+
+    <p class="notice error hidden" id="dashboard-error" role="alert"></p>
+    <p class="notice error hidden mb-6" id="workflow-warning" role="status">
+      Some admin workflows require database migration 0003. Revenue is unavailable until it is applied.
+    </p>
+    <section aria-label="Platform metrics" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">Pending approvals</p>
+        <p class="mt-2 text-3xl font-black text-brand-navy" id="pending-count">Loading…</p>
+        <a class="mt-4 inline-flex text-sm font-semibold text-brand-navy" href="/admin/approvals.html">Review accounts →</a>
+      </article>
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">Approved suppliers</p>
+        <p class="mt-2 text-3xl font-black text-brand-navy" id="supplier-count">Loading…</p>
+      </article>
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">Approved medical shops</p>
+        <p class="mt-2 text-3xl font-black text-brand-navy" id="shop-count">Loading…</p>
+      </article>
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">Active catalogue listings</p>
+        <p class="mt-2 text-3xl font-black text-brand-navy" id="listing-count">Loading…</p>
+      </article>
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">Enquiries</p>
+        <p class="mt-2 text-3xl font-black text-brand-navy" id="enquiry-count">Loading…</p>
+      </article>
+      <article class="card p-5">
+        <p class="text-sm text-slate-600">Active subscriptions</p>
+        <p class="mt-2 text-3xl font-black text-brand-navy" id="subscription-count">Loading…</p>
+      </article>
+    </section>
+
+    <section class="mt-8 grid gap-6 lg:grid-cols-2">
+      <article class="card p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="page-eyebrow">Next steps</p>
+            <h2 class="text-xl font-bold text-brand-navy">Admin tools</h2>
+          </div>
+        </div>
+        <nav aria-label="Admin tools" class="mt-5 grid gap-3 sm:grid-cols-2">
+          <a class="btn btn-secondary justify-center" href="/admin/accounts.html">Account management</a>
+          <a class="btn btn-secondary justify-center" href="/admin/approvals.html">Account approvals</a>
+          <a class="btn btn-secondary justify-center" href="/admin/kyc.html">KYC review queue</a>
+          <a class="btn btn-secondary justify-center" href="/admin/revenue.html">Platform reports</a>
+          <a class="btn btn-secondary justify-center" href="/admin/subscriptions.html">Subscription plans</a>
+          <a class="btn btn-secondary justify-center" href="/admin/audit.html">Admin audit log</a>
+          <a class="btn btn-secondary justify-center" href="/search.html">Open marketplace</a>
+        </nav>
+      </article>
+      <article class="card p-6">
+        <p class="page-eyebrow">Revenue reporting</p>
+        <h2 class="text-xl font-bold text-brand-navy">Settled gross this month</h2>
+        <p class="mt-3 text-3xl font-black text-brand-navy" id="revenue-estimate">Loading…</p>
+        <p class="mt-3 text-sm leading-6 text-slate-600">
+          Based on Cashfree-confirmed INR payments. GST invoices and tax calculations are not included.
+        </p>
+        <a class="mt-4 inline-flex text-sm font-semibold text-brand-navy" href="/admin/revenue.html">View platform report →</a>
+      </article>
+    </section>
+
+    <section class="card mt-8 overflow-hidden">
+      <div class="border-b bg-slate-50 px-6 py-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="page-eyebrow">Account review</p>
+            <h2 class="text-xl font-bold text-brand-navy">Recently registered accounts</h2>
+          </div>
+          <a class="btn btn-secondary btn-sm" href="/admin/approvals.html">All approvals</a>
+        </div>
+      </div>
+      <div id="recent-accounts" aria-live="polite">
+        <p class="px-6 py-8 text-sm text-slate-500">Loading accounts…</p>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/assets/app.js"></script>
+  <script>
+    const pendingCount = document.getElementById('pending-count');
+    const recentAccounts = document.getElementById('recent-accounts');
+    const dashboardError = document.getElementById('dashboard-error');
+    const workflowWarning = document.getElementById('workflow-warning');
+    const refreshButton = document.getElementById('refresh');
+
+    function roleLabel(role) {
+      return role === 'medical_shop' ? 'Medical shop' : role === 'supplier' ? 'Supplier' : 'Admin';
+    }
+
+    function renderAccounts(accounts) {
+      pendingCount.textContent = String(accounts.length);
+      if (!accounts.length) {
+        recentAccounts.innerHTML = '<p class="px-6 py-8 text-sm text-slate-600">No accounts are waiting for approval.</p>';
+        return;
+      }
+
+      recentAccounts.innerHTML = `<ul class="divide-y">${accounts.slice(0, 5).map((account) => `
+        <li class="flex flex-col gap-1 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="font-semibold text-slate-900">${esc(account.fullName)}</p>
+            <p class="text-sm text-slate-600">${esc(account.email)}</p>
+          </div>
+          <span class="text-sm text-slate-500">${esc(roleLabel(account.role))} · ${account.emailVerified ? 'Email verified' : 'Email not verified'}</span>
+        </li>`).join('')}</ul>`;
+    }
+
+    async function loadDashboard() {
+      refreshButton.disabled = true;
+      dashboardError.textContent = '';
+      dashboardError.classList.add('hidden');
+      try {
+        const [accounts, metrics] = await Promise.all([
+          api('/api/admin/accounts/pending'),
+          api('/api/admin/revenue')
+        ]);
+        renderAccounts(accounts);
+        document.getElementById('supplier-count').textContent = metrics.activeSuppliers.toLocaleString();
+        document.getElementById('shop-count').textContent = metrics.activeMedicalShops.toLocaleString();
+        document.getElementById('listing-count').textContent = metrics.totalListings.toLocaleString();
+        document.getElementById('enquiry-count').textContent = metrics.totalEnquiries.toLocaleString();
+        document.getElementById('subscription-count').textContent = metrics.activeSubscriptions.toLocaleString();
+        document.getElementById('revenue-estimate').textContent =
+          metrics.billingSchemaAvailable === false
+            ? 'Unavailable'
+            : `₹${Number(metrics.currentMonthRevenue).toLocaleString()}`;
+        workflowWarning.classList.toggle('hidden', metrics.billingSchemaAvailable !== false);
+      } catch (error) {
+        console.error('Admin dashboard failed to load:', error);
+        dashboardError.textContent = error instanceof Error
+          ? `Could not load the admin overview: ${error.message}`
+          : 'Could not load the admin overview. Please try again.';
+        dashboardError.classList.remove('hidden');
+        pendingCount.textContent = '—';
+        recentAccounts.innerHTML = '<p class="px-6 py-8 text-sm text-red-700">Account data is unavailable.</p>';
+      } finally {
+        refreshButton.disabled = false;
+      }
+    }
+
+    refreshButton.addEventListener('click', loadDashboard);
+    loadDashboard();
+  </script>
+</body>
+</html>

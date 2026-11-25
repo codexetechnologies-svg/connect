@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Business documents — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <header class="mb-6">
+      <p class="page-eyebrow">Business verification</p>
+      <h1 class="page-title">KYC documents</h1>
+      <p class="page-description">Upload a business licence or GST certificate for private admin review. Documents are stored in a private bucket and retained until account deletion.</p>
+    </header>
+    <p class="notice info">Accepted formats: PDF, JPG, or PNG. Maximum size: 10 MB. Do not upload personal identity documents.</p>
+    <p class="notice hidden" id="upload-status" role="status"></p>
+    <section class="card mt-6 p-6">
+      <h2 class="text-xl font-bold text-brand-navy">Submit a document</h2>
+      <form class="mt-4 grid gap-4 md:grid-cols-2" id="upload-form">
+        <label class="text-sm font-semibold text-slate-700" for="document-type">Document type
+          <select class="mt-1 w-full" id="document-type" name="documentType" required></select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700" for="document-file">Choose a file
+          <input class="mt-1 w-full" id="document-file" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required />
+        </label>
+        <div class="md:col-span-2">
+          <button class="btn btn-primary" id="upload-button" type="submit">Upload for review</button>
+        </div>
+      </form>
+    </section>
+    <section class="mt-8">
+      <h2 class="mb-4 text-xl font-bold text-brand-navy">Submitted documents</h2>
+      <div class="grid gap-4" id="document-list" aria-live="polite">
+        <p class="text-sm text-slate-500">Loading documents…</p>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/assets/app.js"></script>
+  <script>
+    const form = document.getElementById('upload-form');
+    const statusEl = document.getElementById('upload-status');
+    const fileInput = document.getElementById('document-file');
+    const typeSelect = document.getElementById('document-type');
+    const listEl = document.getElementById('document-list');
+    const uploadButton = document.getElementById('upload-button');
+    const labels = {
+      wholesale_license: 'Wholesale drug licence',
+      retail_license: 'Retail drug licence',
+      gst_certificate: 'GST certificate'
+    };
+
+    function showStatus(message, success) {
+      statusEl.textContent = message;
+      statusEl.className = `notice ${success ? 'ok' : 'error'}`;
+    }
+
+    function renderDocuments(documents) {
+      if (!documents.length) {
+        listEl.innerHTML = '<div class="card p-5"><p class="text-sm text-slate-600">No business documents have been submitted.</p></div>';
+        return;
+      }
+      listEl.innerHTML = documents.map((document) => `
+        <article class="card p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="font-semibold text-slate-900">${esc(labels[document.documentType] || document.documentType)}</h3>
+              <p class="mt-1 text-xs text-slate-500">Submitted ${esc(fmtDate(document.createdAt))}</p>
+            </div>
+            <span class="badge ${document.status === 'approved' ? 'green' : ''}">${esc(document.status.replace('_', ' '))}</span>
+          </div>
+          ${document.reviewNotes ? `<p class="mt-3 text-sm text-slate-600">Reviewer note: ${esc(document.reviewNotes)}</p>` : ''}
+        </article>`).join('');
+    }
+
+    async function loadDocuments() {
+      try {
+        renderDocuments(await api('/api/kyc/documents'));
+      } catch (error) {
+        console.error('Could not load KYC documents:', error);
+        listEl.innerHTML = '<p class="text-sm text-red-700">Could not load documents. Refresh to try again.</p>';
+      }
+    }
+
+    async function initializeDocumentTypes() {
+      try {
+        const { user } = await api('/api/auth/session');
+        const types = user.role === 'supplier'
+          ? ['wholesale_license', 'gst_certificate']
+          : ['retail_license', 'gst_certificate'];
+        typeSelect.innerHTML = types.map((type) =>
+          `<option value="${esc(type)}">${esc(labels[type])}</option>`
+        ).join('');
+      } catch (error) {
+        console.error('Could not determine account type for KYC:', error);
+        showStatus('Could not verify your account. Refresh the page and try again.', false);
+        uploadButton.disabled = true;
+      }
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) return;
+      uploadButton.disabled = true;
+      statusEl.classList.add('hidden');
+      try {
+        const mimeType = file.type || ({
+          pdf: 'application/pdf',
+          jpg: 'image/jpeg',
+          jpeg: 'image/jpeg',
+          png: 'image/png'
+        })[file.name.split('.').pop().toLowerCase()];
+          const upload = await api('/api/kyc/documents', {
+          method: 'POST',
+          body: JSON.stringify({
+            documentType: typeSelect.value,
+            mimeType,
+            size: file.size
+          })
+        });
+        const response = await fetch(`/api/kyc/documents/${encodeURIComponent(upload.documentId)}/upload`, {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': mimeType },
+          body: file
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'The private document upload failed. Try again.');
+        showStatus('Document uploaded and sent for admin review.', true);
+        form.reset();
+        await loadDocuments();
+      } catch (error) {
+        console.error('KYC document upload failed:', error);
+        showStatus(error instanceof Error ? error.message : 'Document upload failed. Try again.', false);
+      } finally {
+        uploadButton.disabled = false;
+      }
+    });
+
+    initializeDocumentTypes();
+    loadDocuments();
+  </script>
+</body>
+</html>

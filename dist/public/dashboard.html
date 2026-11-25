@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboard — Connect Pharma</title>
+<link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+<div id="site-header"></div>
+<main class="container page-shell">
+  <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="page-eyebrow">Dashboard</p>
+      <h1 class="page-title">Account overview</h1>
+    </div>
+    <button class="btn btn-primary" id="refresh">Refresh sample catalog</button>
+  </header>
+  <p class="notice info hidden" id="refresh-note"></p>
+  <section class="grid gap-4 md:grid-cols-3">
+    <div class="card p-5"><div class="stat-card"><div class="bar" style="background:#0B3B60"></div><div class="text-3xl font-black text-brand-navy">1,284</div><div class="mt-2 text-sm text-slate-600">Active medicine SKUs</div></div></div>
+    <div class="card p-5"><div class="stat-card"><div class="bar" style="background:#16A34A"></div><div class="text-3xl font-black text-brand-navy">12.4%</div><div class="mt-2 text-sm text-slate-600">Average discount</div></div></div>
+    <div class="card p-5"><div class="stat-card"><div class="bar" style="background:#D97706"></div><div class="text-3xl font-black text-brand-navy">29</div><div class="mt-2 text-sm text-slate-600">Pending enquiries</div></div></div>
+  </section>
+  <section class="mt-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+    <div class="card p-6">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold text-slate-900">Recent approvals</h2>
+        <span class="badge green">Verified</span>
+      </div>
+      <div class="mt-6 space-y-4" id="recent-list"></div>
+    </div>
+    <div class="card p-6">
+      <h2 class="text-xl font-semibold text-slate-900">Account status</h2>
+      <div class="mt-6 space-y-4">
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><p class="text-sm text-emerald-700">KYC verification</p><p class="mt-1 text-xl font-bold text-emerald-900">Approved</p></div>
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p class="text-sm text-slate-500">Subscription</p><p class="mt-1 text-xl font-bold text-brand-navy">Professional</p></div>
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p class="text-sm text-slate-500">District coverage</p><p class="mt-1 text-xl font-bold text-brand-navy">Madurai • Tirunelveli</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+const sample = [
+  ['Paracetamol 650mg', 'Astra Pharma', '₹18.40'],
+  ['Amoxicillin 500mg', 'Bharat Labs', '₹64.20'],
+  ['Vitamin B12 Injection', 'Cureline', '₹271.00']
+];
+document.getElementById('recent-list').innerHTML = sample.map(([m, s, p]) => `
+  <div class="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+    <div><p class="font-medium text-slate-900">${esc(m)}</p><p class="text-sm text-slate-500">${esc(s)}</p></div>
+    <div class="text-right"><p class="font-semibold text-brand-navy">${p}</p><p class="text-xs uppercase tracking-wide text-emerald-700">In Stock</p></div>
+  </div>`).join('');
+document.getElementById('refresh').addEventListener('click', () => {
+  const note = document.getElementById('refresh-note');
+  note.textContent = 'Sample catalog refreshed at ' + new Date().toLocaleTimeString() + '. Demo data is not connected to a live feed.';
+  note.classList.remove('hidden');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Retailer dashboard — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <header class="mb-8">
+      <p class="page-eyebrow">Retailer portal</p>
+      <h1 class="page-title">Retailer dashboard</h1>
+      <p class="page-description">Find supplier offers, compare medicine details, and manage your existing account tasks.</p>
+    </header>
+
+    <p class="notice info">Email verification grants portal access but does not verify your Drug Licence or GST. Submit current documents in KYC for manual review; review does not replace statutory checks.</p>
+    <section aria-label="Retailer workflows" class="grid gap-4 sm:grid-cols-2">
+      <article class="card p-6">
+        <p class="page-eyebrow">Medicine sourcing</p>
+        <h2 class="text-xl font-bold text-brand-navy">Search medicine offers</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-600">Compare medicine details, pack sizes, prices, and supplier availability.</p>
+        <a class="btn btn-primary mt-5" href="/search.html">Open medicine search</a>
+      </article>
+      <article class="card p-6">
+        <p class="page-eyebrow">Supplier network</p>
+        <h2 class="text-xl font-bold text-brand-navy">Explore supplier coverage</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-600">Review supplier locations and delivery coverage on the map.</p>
+        <a class="btn btn-secondary mt-5" href="/map.html">Open supplier map</a>
+      </article>
+      <article class="card p-6">
+        <p class="page-eyebrow">Account</p>
+        <h2 class="text-xl font-bold text-brand-navy">KYC documents</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-600">View and manage the verification documents for your account.</p>
+        <a class="btn btn-secondary mt-5" href="/kyc.html">Manage KYC</a>
+      </article>
+      <article class="card p-6">
+        <p class="page-eyebrow">Account</p>
+        <h2 class="text-xl font-bold text-brand-navy">Subscription plan</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-600">Review the plans available to your medical shop account.</p>
+        <a class="btn btn-secondary mt-5" href="/subscription-plans.html">View plans</a>
+      </article>
+    </section>
+
+    <section aria-label="My enquiries" class="card mt-8 overflow-hidden">
+      <div class="border-b bg-slate-50 px-6 py-4">
+        <h2 class="text-xl font-semibold text-slate-900">My enquiries</h2>
+        <p class="mt-1 text-sm text-slate-500">Enquiries you send from medicine search appear here with the supplier's response.</p>
+      </div>
+      <div id="enquiries-list"></div>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/assets/app.js"></script>
+  <script>
+    const enquiriesList = document.getElementById('enquiries-list');
+
+    function enquiryStatusBadge(status) {
+      const cls = { new: 'blue', quoted: 'green', follow_up: 'amber', closed: 'slate', cancelled: 'red' }[status] || 'slate';
+      const label = { new: 'New', quoted: 'Quoted', follow_up: 'Follow-up', closed: 'Closed', cancelled: 'Cancelled' }[status] || status;
+      return `<span class="badge ${cls}">${esc(label)}</span>`;
+    }
+
+    function renderEnquiries(rows) {
+      if (!rows.length) {
+        enquiriesList.innerHTML = '<div class="px-6 py-8 text-center text-slate-500">No enquiries yet. Search for a medicine and send an enquiry to a supplier.</div>';
+        return;
+      }
+      enquiriesList.innerHTML = `<div class="divide-y divide-slate-100">${rows.map(e => `
+        <div class="px-6 py-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p class="font-semibold text-slate-900">${esc(e.medicineName)}</p>
+              <p class="text-sm text-slate-500">${esc(e.composition || '')}${e.strength ? ' · ' + esc(e.strength) : ''} · ${esc(e.packSize || '')} · Qty ${e.quantity}</p>
+              <p class="text-sm text-slate-600">To: ${esc(e.supplierName)}</p>
+              ${e.message ? `<p class="mt-1 text-xs text-slate-400">${esc(e.message)}</p>` : ''}
+            </div>
+            <div class="text-right">
+              ${enquiryStatusBadge(e.status)}
+              <p class="mt-1 text-xs text-slate-400">${fmtDateTime(e.createdAt)}</p>
+            </div>
+          </div>
+          ${e.supplierResponse ? `<div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"><p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Supplier response</p><p class="mt-1 text-sm text-slate-800">${esc(e.supplierResponse)}</p></div>` : ''}
+        </div>`).join('')}</div>`;
+    }
+
+    (async () => {
+      enquiriesList.innerHTML = '<div class="px-6 py-8 text-center text-slate-500">Loading enquiries...</div>';
+      try {
+        renderEnquiries(await api('/api/enquiries/mine'));
+      } catch (e) {
+        console.error(e);
+        enquiriesList.innerHTML = '<div class="px-6 py-8 text-center text-slate-500">Could not load your enquiries.</div>';
+      }
+    })();
+  </script>
+</body>
+</html>

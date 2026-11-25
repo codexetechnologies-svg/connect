@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Enquiries — Connect Pharma</title>
+<link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+<div id="site-header"></div>
+<main class="container page-shell">
+  <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="page-eyebrow">Supplier CRM</p>
+      <h1 class="page-title">Medical shop enquiries</h1>
+    </div>
+    <button class="btn btn-primary" id="export">Export lead list</button>
+  </header>
+  <p class="notice info hidden" id="notice" role="status"></p>
+  <div class="card overflow-hidden">
+    <div class="border-b bg-slate-50 px-6 py-4"><h2 class="text-xl font-semibold text-slate-900">Lead pipeline</h2></div>
+    <div id="list"></div>
+  </div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+const listEl = document.getElementById('list');
+const notice = document.getElementById('notice');
+let leads = [];
+let active = null;
+let draft = '';
+
+function statusBadge(status) {
+  const cls = status === 'new' ? 'blue' : status === 'quoted' ? 'green' : 'amber';
+  const label = { new: 'New', quoted: 'Quoted', follow_up: 'Follow-up', closed: 'Closed', cancelled: 'Cancelled' }[status] || status;
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function render() {
+  if (!leads.length) {
+    listEl.innerHTML = '<div class="px-6 py-8 text-center text-slate-500">No enquiries found.</div>';
+    return;
+  }
+  listEl.innerHTML = leads.map(l => `
+    <div class="lead-row">
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div class="font-semibold text-slate-900">${esc(l.medicalShopName)}</div>
+          <div class="text-sm text-slate-500">${esc(l.medicineName)} · Quantity ${l.quantity}</div>
+          ${l.message ? `<div class="mt-1 text-xs text-slate-400">${esc(l.message)}</div>` : ''}
+        </div>
+        <div class="lead-actions">
+          ${statusBadge(l.status)}
+          ${l.status === 'new' ? `<button class="btn btn-secondary btn-sm" data-respond="${esc(l.id)}">${active === l.id ? 'Cancel' : 'Respond'}</button>` : ''}
+        </div>
+      </div>
+      ${active === l.id ? `
+      <form class="mt-4 rounded-xl border border-brand-border bg-slate-50 p-4" data-form="${esc(l.id)}">
+        <label class="field-label" for="resp-${esc(l.id)}">Draft a quote response</label>
+        <textarea id="resp-${esc(l.id)}" required class="form-control" style="min-height:6rem" placeholder="Enter price, availability, and delivery details">${esc(draft)}</textarea>
+        <button type="submit" class="btn btn-primary btn-sm mt-3">Save response</button>
+      </form>` : ''}
+    </div>`).join('');
+
+  listEl.querySelectorAll('[data-respond]').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.dataset.respond;
+    const lead = leads.find(x => x.id === id);
+    active = active === id ? null : id;
+    draft = lead ? (lead.supplierResponse || '') : '';
+    notice.classList.add('hidden');
+    render();
+  }));
+  listEl.querySelectorAll('[data-form]').forEach(form => form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = form.dataset.form;
+    const text = form.querySelector('textarea').value.trim();
+    if (!text) return;
+    try {
+      await api(`/api/enquiries/${id}/respond`, { method: 'POST', body: JSON.stringify({ status: 'quoted', response: text }) });
+      const lead = leads.find(x => x.id === id);
+      if (lead) { lead.status = 'quoted'; lead.supplierResponse = text; }
+      active = null; draft = '';
+      notice.textContent = 'Response saved successfully.';
+      notice.className = 'notice ok';
+    } catch (err) {
+      notice.textContent = 'Failed to save response. Please try again.';
+      notice.className = 'notice error';
+    }
+    render();
+  }));
+}
+
+document.getElementById('export').addEventListener('click', () => {
+  const escCsv = v => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = [['Shop', 'Medicine', 'Quantity', 'Status'],
+    ...leads.map(l => [l.medicalShopName, l.medicineName, l.quantity, l.status])];
+  const csv = rows.map(r => r.map(escCsv).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'connect-pharma-leads.csv'; a.click();
+  URL.revokeObjectURL(url);
+  notice.textContent = 'Lead list downloaded as CSV.';
+  notice.className = 'notice info';
+});
+
+(async () => {
+  listEl.innerHTML = '<div class="px-6 py-8 text-center text-slate-500">Loading enquiries...</div>';
+  try { leads = await api('/api/supplier/enquiries'); }
+  catch (e) { console.error(e); }
+  render();
+})();
+</script>
+</body>
+</html>

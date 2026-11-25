@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>KYC review — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <header class="mb-6">
+      <p class="page-eyebrow">Admin controls</p>
+      <h1 class="page-title">KYC document review</h1>
+      <p class="page-description">Review private business licence and GST documents. Approving a document does not approve the account or certify the document’s legal validity.</p>
+    </header>
+    <p class="notice info">Files are exposed through short-lived private download links. Record a reason for every review decision.</p>
+    <p class="notice hidden" id="status" role="status"></p>
+    <section class="mt-6 grid gap-4" id="documents" aria-live="polite">
+      <p class="text-sm text-slate-500">Loading documents…</p>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/assets/app.js"></script>
+  <script>
+    const documentsEl = document.getElementById('documents');
+    const statusEl = document.getElementById('status');
+    const documentLabels = {
+      wholesale_license: 'Wholesale drug licence',
+      retail_license: 'Retail drug licence',
+      gst_certificate: 'GST certificate'
+    };
+
+    async function openDocument(id) {
+      try {
+        const { downloadUrl } = await api(`/api/admin/kyc/${encodeURIComponent(id)}/download-url`, {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.click();
+      } catch (error) {
+        statusEl.textContent = error instanceof Error ? error.message : 'Could not open the private document.';
+        statusEl.className = 'notice error';
+      }
+    }
+
+    function renderDocuments(documents) {
+      if (!documents.length) {
+        documentsEl.innerHTML = '<div class="card p-6"><p class="text-sm text-slate-600">No documents are waiting for review.</p></div>';
+        return;
+      }
+      documentsEl.innerHTML = documents.map((document) => `
+        <article class="card p-6">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p class="page-eyebrow">${esc(document.role === 'supplier' ? 'Supplier' : 'Medical shop')}</p>
+              <h2 class="text-xl font-bold text-brand-navy">${esc(documentLabels[document.documentType] || document.documentType)}</h2>
+              <p class="mt-2 font-semibold text-slate-900">${esc(document.fullName)}</p>
+              <p class="text-sm text-slate-600">${esc(document.email)}</p>
+              <p class="mt-1 text-xs text-slate-500">Submitted ${esc(fmtDateTime(document.createdAt))}</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" data-open="${esc(document.id)}" type="button">View document</button>
+          </div>
+          <form class="review-form mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-end" data-document-id="${esc(document.id)}">
+            <label class="flex-1 text-sm font-semibold text-slate-700">Review reason
+              <input class="mt-1 w-full" name="reason" type="text" maxlength="500" required placeholder="Required for audit history" />
+            </label>
+            <div class="flex gap-2">
+              <button class="btn btn-success btn-sm" name="decision" value="approved" type="submit">Approve document</button>
+              <button class="btn btn-secondary btn-sm" name="decision" value="rejected" type="submit">Reject document</button>
+            </div>
+          </form>
+        </article>`).join('');
+
+      documentsEl.querySelectorAll('[data-open]').forEach((button) => {
+        button.addEventListener('click', () => openDocument(button.dataset.open));
+      });
+      documentsEl.querySelectorAll('.review-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const button = event.submitter;
+          button.disabled = true;
+          try {
+            await api(`/api/admin/kyc/${encodeURIComponent(form.dataset.documentId)}/review`, {
+              method: 'POST',
+              body: JSON.stringify({
+                status: button.value,
+                reason: form.elements.reason.value
+              })
+            });
+            statusEl.textContent = `Document ${button.value}.`;
+            statusEl.className = 'notice ok';
+            await loadDocuments();
+          } catch (error) {
+            statusEl.textContent = error instanceof Error ? error.message : 'Could not save the review decision.';
+            statusEl.className = 'notice error';
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+    }
+
+    async function loadDocuments() {
+      try {
+        renderDocuments(await api('/api/admin/kyc/pending'));
+      } catch (error) {
+        console.error('Could not load KYC review queue:', error);
+        documentsEl.innerHTML = '<p class="text-sm text-red-700">Could not load KYC documents. Refresh to try again.</p>';
+      }
+    }
+
+    loadDocuments();
+  </script>
+</body>
+</html>

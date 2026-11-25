@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Subscription plans — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <header class="mb-6">
+      <p class="page-eyebrow">Billing</p>
+      <h1 class="page-title">Subscription plans</h1>
+      <p class="page-description">Choose a monthly plan for one 30-day period. Your subscription activates after Cashfree confirms payment; renewals are manual, not automatic.</p>
+    </header>
+    <p class="notice info">The listed price is the amount charged in INR. Plan SKU limits are displayed, but the application does not currently enforce a unique active-SKU limit or automatically request an upgrade. Renewal reminders and recurring charges are not enabled. GST invoice generation is not enabled; payments are reported as settled gross totals.</p>
+    <p class="notice hidden" id="status" role="status"></p>
+    <p class="notice info hidden" id="current-subscription" role="status"></p>
+    <label class="mt-5 block max-w-md text-sm font-semibold text-slate-700" for="customer-phone">Contact phone for checkout
+      <input class="mt-1 w-full" id="customer-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required />
+    </label>
+    <section class="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3" id="plans" aria-live="polite">
+      <p class="text-sm text-slate-500">Loading plans…</p>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+    const plansEl = document.getElementById('plans');
+    const statusEl = document.getElementById('status');
+    const subscriptionEl = document.getElementById('current-subscription');
+    const phoneInput = document.getElementById('customer-phone');
+    let plans = [];
+    let activeSubscription = null;
+    let checkoutInProgress = false;
+
+    function showStatus(message, success) {
+      statusEl.textContent = message;
+      statusEl.className = `notice ${success ? 'ok' : 'error'}`;
+    }
+
+    function renderPlans() {
+      if (!plans.length) {
+        plansEl.innerHTML = '<div class="card p-6"><p class="text-sm text-slate-600">No subscription plans are available right now.</p></div>';
+        return;
+      }
+      plansEl.innerHTML = plans.map((plan) => {
+        let features = Array.isArray(plan.features) ? plan.features : [];
+        if (!features.length && typeof plan.features === 'string') {
+          try {
+            const parsed = JSON.parse(plan.features);
+            if (Array.isArray(parsed)) features = parsed;
+          } catch { features = []; }
+        }
+        return `<article class="card flex flex-col p-6">
+          <h2 class="text-xl font-bold text-brand-navy">${esc(plan.tier)}</h2>
+          <p class="mt-3 text-3xl font-black text-slate-900">₹${Number(plan.monthlyFee).toLocaleString('en-IN')}<span class="text-sm font-medium text-slate-500"> / month</span></p>
+          <p class="mt-1 text-sm text-slate-500">Up to ${Number(plan.skuLimit).toLocaleString('en-IN')} SKUs</p>
+          <ul class="mt-4 flex-1 space-y-2 text-sm text-slate-600">
+            ${features.map((feature) => `<li>• ${esc(feature)}</li>`).join('')}
+          </ul>
+          <button class="btn btn-primary mt-6 w-full" data-plan-id="${esc(plan.id)}" data-plan-fee="${esc(plan.monthlyFee)}" type="button" ${activeSubscription ? 'disabled' : ''}>${activeSubscription ? 'Already subscribed' : 'Continue to payment'}</button>
+        </article>`;
+      }).join('');
+      plansEl.querySelectorAll('[data-plan-id]').forEach((button) => {
+        button.addEventListener('click', () => startCheckout(button));
+      });
+    }
+
+    async function startCheckout(button) {
+      if (checkoutInProgress) return;
+      const phone = phoneInput.value.trim();
+      if (Number(button.dataset.planFee) > 0 && !phone) {
+        phoneInput.focus();
+        showStatus('Enter a contact phone number to continue to checkout.', false);
+        return;
+      }
+      if (Number(button.dataset.planFee) > 0 && typeof window.Cashfree !== 'function') {
+        showStatus('Cashfree checkout could not be loaded. Refresh and try again.', false);
+        return;
+      }
+      checkoutInProgress = true;
+      button.disabled = true;
+      try {
+        const order = await api('/api/billing/orders', {
+          method: 'POST',
+          body: JSON.stringify({ planId: button.dataset.planId, customerPhone: phone })
+        });
+        if (order.free) {
+          showStatus('Your free subscription is active.', true);
+          window.location.assign('/dashboard.html');
+          return;
+        }
+        if (typeof window.Cashfree !== 'function') {
+          throw new Error('Cashfree checkout could not be loaded. Refresh and try again.');
+        }
+        const cashfree = window.Cashfree({ mode: order.mode });
+        await cashfree.checkout({
+          paymentSessionId: order.paymentSessionId,
+          redirectTarget: '_self'
+        });
+      } catch (error) {
+        console.error('Could not start subscription checkout:', error);
+        showStatus(error instanceof Error ? error.message : 'Could not start checkout.', false);
+      } finally {
+        checkoutInProgress = false;
+        button.disabled = false;
+      }
+    }
+
+    (async () => {
+      try {
+        const [availablePlans, subscription] = await Promise.all([
+          api('/api/billing/plans'),
+          api('/api/billing/subscription')
+        ]);
+        plans = availablePlans;
+        activeSubscription = subscription;
+        if (activeSubscription) {
+          const endDate = activeSubscription.endDate
+            ? new Date(activeSubscription.endDate).toLocaleDateString('en-IN')
+            : 'no expiry date';
+          subscriptionEl.textContent =
+            `Your ${activeSubscription.tier} plan is ${activeSubscription.status} until ${endDate}. New checkout is available after it expires.`;
+          subscriptionEl.classList.remove('hidden');
+        }
+        renderPlans();
+      } catch (error) {
+        console.error('Could not load billing plans:', error);
+        plansEl.innerHTML = '<p class="text-sm text-red-700">Could not load plans. Please try again later.</p>';
+      }
+    })();
+  </script>
+</body>
+</html>

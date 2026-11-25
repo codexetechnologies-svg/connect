@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Account management — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <header class="admin-page-header">
+      <p class="page-eyebrow">Admin controls</p>
+      <h1 class="page-title">Account management</h1>
+      <p class="page-description">Review account access, record status decisions, and manage account data.</p>
+    </header>
+    <p class="notice hidden" id="status" role="status"></p>
+    <section class="accounts-toolbar">
+      <label for="status-filter">Show accounts
+        <select id="status-filter">
+          <option value="all">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="suspended">Suspended</option>
+        </select>
+      </label>
+      <a class="btn btn-secondary" href="/admin/kyc.html">Review KYC documents <span aria-hidden="true">→</span></a>
+    </section>
+    <section class="accounts-panel">
+      <div id="accounts" aria-live="polite">
+        <p class="accounts-empty">Loading accounts…</p>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/assets/app.js"></script>
+  <script>
+    const accountsEl = document.getElementById('accounts');
+    const statusEl = document.getElementById('status');
+    const statusFilter = document.getElementById('status-filter');
+    const statusActions = {
+      pending: ['rejected', 'Reject'],
+      approved: ['suspended', 'Suspend'],
+      suspended: ['approved', 'Reinstate']
+    };
+
+    function renderAccounts(accounts) {
+      if (!accounts.length) {
+        accountsEl.innerHTML = '<div class="accounts-empty"><strong>No accounts found</strong><span>Try a different status filter.</span></div>';
+        return;
+      }
+      accountsEl.innerHTML = `<ul class="account-list">${accounts.map((account) => {
+        const action = statusActions[account.status];
+        const statusClass = { pending: 'amber', approved: 'green', rejected: 'red', suspended: 'blue' }[account.status] || 'blue';
+        return `<li class="account-row">
+          <div class="account-summary">
+            <div class="account-summary-heading">
+              <p class="account-name">${esc(account.fullName)}</p>
+              <span class="badge ${statusClass}">${esc(account.status)}</span>
+            </div>
+            <p class="account-email">${esc(account.email)}</p>
+            <p class="account-meta">${esc(account.role === 'medical_shop' ? 'Medical shop' : 'Supplier')} <span>·</span> Registered ${esc(fmtDate(account.createdAt))}</p>
+          </div>
+          <div class="account-actions">
+            ${action ? `<form class="account-action account-action-form" data-account-id="${esc(account.id)}" data-next-status="${action[0]}">
+              <label>${action[0] === 'rejected' ? 'Rejection reason' : action[0] === 'suspended' ? 'Suspension reason' : 'Reinstatement reason'}
+                <input class="mt-1" name="reason" type="text" maxlength="500" required placeholder="Required for audit history" />
+              </label>
+              <button class="btn ${action[0] === 'rejected' || action[0] === 'suspended' ? 'btn-secondary' : 'btn-success'} btn-sm" type="submit">${action[1]}</button>
+            </form>` : '<span class="text-sm text-slate-500">No status action available</span>'}
+            <form class="account-deletion account-action-form" data-account-id="${esc(account.id)}" data-account-name="${esc(account.fullName)}">
+              <label>Deletion reason
+                <input class="mt-1" name="reason" type="text" maxlength="500" required placeholder="Required for audit history" />
+              </label>
+              <button class="btn btn-danger btn-sm" type="submit">Delete account <span aria-hidden="true">→</span></button>
+            </form>
+          </div>
+        </li>`;
+      }).join('')}</ul>`;
+
+      accountsEl.querySelectorAll('.account-action').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const button = form.querySelector('button');
+          button.disabled = true;
+          try {
+            const result = await api(`/api/admin/accounts/${encodeURIComponent(form.dataset.accountId)}/status`, {
+              method: 'POST',
+              body: JSON.stringify({
+                status: form.dataset.nextStatus,
+                reason: form.elements.reason.value
+              })
+            });
+            statusEl.textContent = `Account status changed to ${result.status}.`;
+            statusEl.className = 'notice ok';
+            await loadAccounts();
+          } catch (error) {
+            statusEl.textContent = error instanceof Error ? error.message : 'Could not change account status.';
+            statusEl.className = 'notice error';
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+
+      accountsEl.querySelectorAll('.account-deletion').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const accountName = form.dataset.accountName;
+          if (!window.confirm(
+            `Permanently delete ${accountName} and their KYC files? Settled payment records will be retained without an account link.`
+          )) return;
+          const button = form.querySelector('button');
+          button.disabled = true;
+          try {
+            await api(`/api/admin/accounts/${encodeURIComponent(form.dataset.accountId)}/delete`, {
+              method: 'POST',
+              body: JSON.stringify({ reason: form.elements.reason.value })
+            });
+            statusEl.textContent = 'Account and KYC documents deleted. Settled payment records were retained without an account link.';
+            statusEl.className = 'notice ok';
+            await loadAccounts();
+          } catch (error) {
+            statusEl.textContent = error instanceof Error ? error.message : 'Account deletion did not complete.';
+            statusEl.className = 'notice error';
+            await loadAccounts();
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+    }
+
+    async function loadAccounts() {
+      accountsEl.innerHTML = '<div class="accounts-empty">Loading accounts…</div>';
+      try {
+        const status = statusFilter.value;
+        const accounts = await api(`/api/admin/accounts?status=${encodeURIComponent(status)}`);
+        renderAccounts(accounts);
+      } catch (error) {
+        console.error('Could not load accounts:', error);
+        accountsEl.innerHTML = '<div class="accounts-empty accounts-error"><strong>Could not load accounts</strong><span>Refresh to try again.</span></div>';
+      }
+    }
+
+    statusFilter.addEventListener('change', loadAccounts);
+    loadAccounts();
+  </script>
+</body>
+</html>

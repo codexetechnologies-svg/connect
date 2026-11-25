@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Revenue — Connect Pharma</title>
+<link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+<div id="site-header"></div>
+<main class="container page-shell">
+  <div class="mb-6">
+    <p class="page-eyebrow">Platform analytics</p>
+    <h1 class="page-title">Settled payment reporting</h1>
+    <p class="page-description">Gross INR payments confirmed by Cashfree. GST invoices and tax calculations are not included.</p>
+  </div>
+  <p id="revenue-warning" class="notice error hidden mb-6" role="status">
+    Revenue reporting requires database migration 0003. No revenue total is available until it is applied.
+  </p>
+  <div class="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+    <div class="card p-6">
+      <h2 class="text-xl font-semibold text-slate-900">Revenue trend</h2>
+      <div id="chart" class="mt-6 flex items-end gap-3" style="height:220px"></div>
+      <div id="chart-labels" class="mt-2 flex gap-3"></div>
+    </div>
+    <div class="card p-6">
+      <h2 class="text-xl font-semibold text-slate-900">Summary</h2>
+      <div id="summary" class="mt-6 space-y-4">Loading metrics...</div>
+    </div>
+  </div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(async () => {
+  const summary = document.getElementById('summary');
+  const chart = document.getElementById('chart');
+  const labels = document.getElementById('chart-labels');
+  const warning = document.getElementById('revenue-warning');
+  try {
+    const m = await api('/api/admin/revenue');
+    const billingReady = m.billingSchemaAvailable !== false;
+    warning.classList.toggle('hidden', billingReady);
+    const items = [
+      ['Settled gross this month', billingReady ? '₹' + m.currentMonthRevenue.toLocaleString('en-IN') : 'Unavailable'],
+      ['Active subscriptions', m.activeSubscriptions],
+      ['Pending renewals', m.pendingRenewals],
+      ['Active suppliers', m.activeSuppliers],
+      ['Active medical shops', m.activeMedicalShops]
+    ];
+    summary.innerHTML = items.map(([k, v]) => `
+      <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div class="text-sm text-slate-500">${esc(k)}</div>
+        <div class="mt-1 text-2xl font-black text-brand-navy">${v}</div>
+      </div>`).join('');
+
+    const max = Math.max(...m.monthlyRevenue.map(r => r.value), 1);
+    chart.innerHTML = m.monthlyRevenue.map(r => `
+      <div class="flex flex-col items-center flex-1" style="height:100%">
+        <div class="w-full rounded-t-lg bg-brand-navy/80" style="height:${Math.max(4, r.value / max * 85)}%" title="₹${r.value.toLocaleString()}"></div>
+      </div>`).join('');
+    labels.innerHTML = m.monthlyRevenue.map(r =>
+      `<div class="flex-1 text-center text-xs text-slate-500">${esc(r.month)}</div>`).join('');
+  } catch (e) {
+    console.error(e);
+    summary.innerHTML = '<p class="text-sm text-slate-500">Failed to load metrics</p>';
+  }
+})();
+</script>
+</body>
+</html>

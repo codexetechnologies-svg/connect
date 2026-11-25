@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Payment status — Connect Pharma</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+  <main class="container page-shell">
+    <p class="page-eyebrow">Billing</p>
+    <h1 class="page-title">Payment status</h1>
+    <section class="card mt-6 max-w-2xl p-6">
+      <p class="text-slate-700" id="payment-status" role="status">Checking your payment…</p>
+      <p class="mt-2 text-sm text-slate-500" id="payment-details"></p>
+      <a class="btn btn-secondary mt-5 inline-flex" href="/subscription-plans.html">Back to subscription plans</a>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/assets/app.js"></script>
+  <script>
+    const statusEl = document.getElementById('payment-status');
+    const detailsEl = document.getElementById('payment-details');
+    const orderId = new URLSearchParams(location.search).get('order_id');
+    let checks = 0;
+
+    async function checkOrder() {
+      if (!orderId) {
+        statusEl.textContent = 'No payment order was provided.';
+        return;
+      }
+      try {
+        const payment = await api(`/api/billing/orders/${encodeURIComponent(orderId)}`);
+        if (payment.status === 'paid') {
+          statusEl.textContent = 'Payment confirmed. Your subscription is active.';
+          detailsEl.textContent = `Paid ${new Date(payment.paidAt).toLocaleString()} · ₹${Number(payment.amount).toLocaleString('en-IN')} ${payment.currency}`;
+          statusEl.className = 'font-semibold text-emerald-800';
+          return;
+        }
+        if (payment.status === 'failed') {
+          statusEl.textContent = 'Checkout could not be completed. Choose a plan to try again.';
+          return;
+        }
+        statusEl.textContent = 'Payment is still processing. This page will check again shortly.';
+        checks += 1;
+        if (checks < 12) {
+          window.setTimeout(checkOrder, 5000);
+        } else {
+          statusEl.textContent = 'Payment is still processing. Check back later or contact support before trying again.';
+        }
+      } catch (error) {
+        console.error('Could not check payment status:', error);
+        statusEl.textContent = error instanceof Error ? error.message : 'Could not check payment status.';
+      }
+    }
+
+    checkOrder();
+  </script>
+</body>
+</html>

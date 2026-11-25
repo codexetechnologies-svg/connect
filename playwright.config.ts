@@ -1,10 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
-import { loadEnvConfig } from '@next/env';
-
-loadEnvConfig(process.cwd());
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100';
-const { hostname, port: configuredPort } = new URL(baseURL);
+const { port: configuredPort } = new URL(baseURL);
 const port = configuredPort || '3000';
 
 export default defineConfig({
@@ -24,12 +21,18 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: `npm run dev -- --hostname ${hostname} --port ${port}`,
+    command: 'node server/index.mjs',
     url: baseURL,
     reuseExistingServer: false,
     env: {
       NODE_ENV: 'development',
-      PLAYWRIGHT_TEST_MODE: '1'
+      PORT: port,
+      ...(process.env.PLAYWRIGHT_TEST_DATABASE_URL
+        ? {
+            DATABASE_URL: process.env.PLAYWRIGHT_TEST_DATABASE_URL,
+            NEON_DATABASE_URL: ''
+          }
+        : {})
     },
     timeout: 120_000
   }

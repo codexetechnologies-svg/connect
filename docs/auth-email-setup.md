@@ -1,83 +1,52 @@
-# Email OTP and Resend setup
+# Authentication and account registration
 
-> **Legacy:** The active application sign-in uses Clerk. The Supabase OTP implementation described below is not wired to the current `/login` page. Do not follow this guide to configure production authentication; use Clerk configuration and the PostgreSQL approved-account mapping described in the project README.
+The active Express app uses Supabase Auth for email/password identities and the PostgreSQL `users` table for Connect Pharma account roles and approval status. The account role stored in PostgreSQL is authoritative; public sign-up cannot create admin accounts.
 
-This application uses Supabase Auth to issue and verify email OTPs, Resend SMTP to deliver Supabase authentication messages, Upstash Redis for abuse controls, and the existing PostgreSQL application database for approved account roles.
+## Required configuration
 
-## 1. Configure private environment variables
-
-Set these in local `.env.local` and in Netlify site environment variables. Never add real values to `.env.example`, commit them, or expose them through `NEXT_PUBLIC_*`.
+Set these variables in `.env.local` for development and in the deployment platform for each environment:
 
 | Variable | Purpose |
 | --- | --- |
+| `DATABASE_URL` | PostgreSQL database for account records |
 | `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_PUBLISHABLE_KEY` | Server-side Supabase publishable key; `SUPABASE_ANON_KEY` is accepted for older projects |
-| `DATABASE_URL` or `NEON_DATABASE_URL` | PostgreSQL application database containing approved Connect Pharma users. Supabase and Neon connection URLs are supported; URL-encode reserved characters in credentials. |
-| `SESSION_SECRET` | Random secret of at least 32 characters for signed app sessions |
-| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL |
-| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token |
-| `RESEND_API_KEY` | Resend API key; server-side only |
-| `EMAIL_FROM` | `The Connect Pharma <noreply@connectpharma.in>` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Local seed script only; never expose or use in client/deployment settings |
-| `AUTH_SEED_ADMIN_EMAIL`, `AUTH_SEED_MEDICAL_SHOP_EMAIL`, `AUTH_SEED_SUPPLIER_EMAIL` | Distinct inboxes controlled by the local operator for seed accounts |
-| `AUTH_SEED_CONFIRM` | Must be `LOCAL_TEST_USERS` to allow local/test seeding |
+| `SUPABASE_ANON_KEY` or `SUPABASE_PUBLISHABLE_KEY` | Public Supabase Auth API key, used by the server |
+| `PUBLIC_APP_URL` | Base origin used to construct the email-confirmation redirect, such as `https://connect.example.com` |
+| `UPSTASH_REDIS_REST_URL` | Shared rate limits for authentication requests |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash credential; keep private |
 
-`RESEND_API_KEY` and the SMTP password in Supabase are the same Resend API key. Keep it only in server/deployment configuration and the Supabase SMTP password field.
+In development, Upstash can be omitted; the app uses an in-memory limiter that is not suitable for production or multiple instances. `SUPABASE_SERVICE_ROLE_KEY` is not needed for registration; it is used only for server-side administrative cleanup such as account deletion. Never expose it to browser code.
 
-OTP requests are limited to 3 per email in 15 minutes, 10 per Netlify client IP in one hour, and one request per email per 60 seconds. A shared Upstash budget also caps application-triggered messages at 100/day and 3,000 per rolling 30 days. Supabase has its own sending limits as well. This does not account for mail sent outside this application using the same Resend account.
+## Supabase email configuration
 
-For local development only, when both Upstash variables are absent, the application uses a process-local in-memory limiter with the same OTP limits and email budgets and prints a warning. This fallback is not shared across processes and is never enabled in production. If either Upstash variable is set, both must be valid; production always requires both.
+The active Express app sends confirmation and password-reset requests through Supabase Auth REST endpoints. It does not send these messages with Resend; `RESEND_API_KEY` and `EMAIL_FROM` do not affect these flows. Configure a working SMTP provider under **Supabase Dashboard → Authentication → SMTP Settings** and use a sender address/domain verified by that provider. Supabase's default email service is rate-limited and is not intended for reliable production delivery.
 
-## 1a. Local bootstrap and readiness checks
+The app's `PUBLIC_APP_URL` must be the origin where the Express app is reachable. The app builds explicit redirects from it. In the Supabase project's Auth URL configuration, allow both exact redirects:
 
-1. A local `.env.local` template is present in this workspace. In a new checkout, copy `.env.example` to `.env.local` and generate a random session secret with `node -p "require('node:crypto').randomBytes(32).toString('base64url')"`. Keep an existing valid secret to avoid invalidating sessions.
-2. Fill in the database, Supabase, Upstash, and Resend values in `.env.local`. Do not paste secrets into chat or commit `.env.local`.
-3. Run `npm run auth:check` to validate configuration and test PostgreSQL, Upstash, and Supabase Auth reachability.
-4. To create local seed accounts, set `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_SEED_ADMIN_EMAIL`, `AUTH_SEED_MEDICAL_SHOP_EMAIL`, `AUTH_SEED_SUPPLIER_EMAIL`, and `AUTH_SEED_CONFIRM=LOCAL_TEST_USERS`. Use distinct inboxes you control and a local/test database only. Then run `npm run db:seed-auth` in an interactive terminal and type the displayed database host to confirm the target. The command pushes only the auth enums and `users` table, then provisions three approved users in both the application database and Supabase Auth. It refuses to run in production or Netlify.
-5. Start `npm run dev` and open `http://localhost:3000/login`. OTP email delivery additionally requires the Supabase custom SMTP configuration in Step 3 below.
+```text
+${PUBLIC_APP_URL}/login.html?verified=1
+${PUBLIC_APP_URL}/login.html?mode=reset-password
+```
 
-## 2. Verify `connectpharma.in` with Resend
+For local development with `PUBLIC_APP_URL=http://localhost:4000`, allow `http://localhost:4000/login.html?verified=1` and `http://localhost:4000/login.html?mode=reset-password`. Keep the confirmation and recovery email templates enabled and make sure each template uses the supplied `{{ .ConfirmationURL }}` link.
 
-1. In Resend, add `connectpharma.in` as a sending domain and select a sending region. Resend currently offers Tokyo (`ap-northeast-1`) as its APAC region; this is separate from the Netlify function region.
-2. Copy the DNS records shown for that domain in Resend into the authoritative DNS provider for `connectpharma.in`. Publish the exact record names and values Resend provides:
-   - **DKIM:** publish the Resend-provided DKIM TXT/CNAME record unchanged.
-   - **SPF:** publish the sending/bounce-domain records Resend provides. If a SPF TXT record already exists for the same hostname, merge mechanisms into that single record; do not publish multiple SPF records.
-   - **DMARC:** add a TXT record named `_dmarc` if one does not already exist. Start with a monitoring policy, for example `v=DMARC1; p=none; rua=mailto:dmarc@connectpharma.in; pct=100`, and ensure the reporting mailbox exists. Review reports before moving to `p=quarantine` or `p=reject`.
-3. Wait for DNS propagation and use Resend's domain verification status. Do not guess DKIM keys or region-specific MX/SPF targets; they are unique to the Resend domain configuration.
-4. Send test messages and review SPF, DKIM, and DMARC results in the received message headers. Authentication and domain verification improve trust but cannot guarantee delivery to the Primary inbox; recipient reputation, content, and mailbox-provider filtering also matter.
+## Database setup
 
-See Resend's [verified-domain guide](https://resend.com/docs/dashboard/domains/introduction), [region guide](https://resend.com/docs/dashboard/domains/regions), and [Supabase SMTP guide](https://resend.com/docs/send-with-supabase-smtp).
+Back up the database, then apply `database/migrations/0003_admin_billing_kyc.sql` if it has not already been applied. Signup requires its `users.supabase_auth_id` column and unique index. This migration is not run automatically during builds.
 
-## 3. Configure Supabase Auth
+## Account and email behavior
 
-1. In Supabase, enable the Email provider and set the **Email OTP length** to `6` and **Email OTP expiration** to `600` seconds (10 minutes).
-2. Under **Authentication → Email → SMTP Settings**, enable custom SMTP and enter:
-   - Host: `smtp.resend.com`
-   - Port: `465` (implicit TLS; `587` with STARTTLS is also supported)
-   - Username: `resend`
-   - Password: the Resend API key
-   - Sender email: `noreply@connectpharma.in`
-   - Sender name: `The Connect Pharma`
-3. Under **Authentication → Email Templates → Magic Link or OTP**, set a short subject such as `Your Connect Pharma sign-in code` and paste the contents of [supabase-auth-email-template.html](./supabase-auth-email-template.html). Keep `{{ .Token }}` in the template; do not replace it with `{{ .ConfirmationURL }}` for numeric-code sign-in.
-4. Set the Supabase Site URL and allowed redirect URLs for the production domain and local development. The current OTP flow verifies the code server-side and then creates the app's signed session cookie.
-5. Provision approved Connect Pharma users in **both** Supabase Auth and the application's PostgreSQL `users` table. This flow calls `signInWithOtp` with `shouldCreateUser: false` and only grants an app session when the matching PostgreSQL account has `status = 'approved'`.
+- The sign-in and sign-up modes share `/login.html`. On sign-up, users choose **Retailer** (`medical_shop`) or **Distributor** (`supplier`).
+- The sign-in screen can resend verification email and request a password reset. Reset links return to `/login.html?mode=reset-password`, where the user sets a new password.
+- Registration creates a pending row in PostgreSQL `users` and a Supabase Auth identity, then links the identity to that row. The selected role is saved in PostgreSQL, not trusted from Supabase user metadata.
+- If an email identity was created directly in Supabase Auth, complete sign-up through the app with that identity's email and password, choose the role, and accept the terms. The app links only a valid, email-confirmed identity. Creating a Supabase Auth user alone does not create an app account or grant a role.
+- Retailer and distributor accounts are automatically approved after email verification. The email confirmation callback updates `users.email_verified` and activates a pending account. Manual approval remains available for existing pending accounts; it is not required for new sign-ups.
+- Sign-up is account-first. Business licence, address, and other supplier or retailer profile details are not collected or created by this form; those belong to the later profile/KYC workflow.
+- Admin registration is not public. Provision an admin account through a controlled operator workflow.
+- Duplicate registrations receive a generic response to avoid revealing whether an email is already registered.
 
-Read Supabase's [passwordless email OTP guide](https://supabase.com/docs/guides/auth/auth-email-passwordless) and [custom SMTP guidance](https://supabase.com/docs/guides/auth/auth-smtp) before production use.
+Use `/api/health` to inspect service configuration without exposing credential values. Production also requires the other provider integrations documented in [Admin, billing, and KYC workflows](./admin-workflows.md).
 
-## 4. Configure Netlify for Singapore
+## Local read-only role preview
 
-The Netlify Functions region in `netlify.toml` is `sin`, Netlify's region code for Singapore (`ap-southeast-1`). In the Netlify site dashboard, confirm **Cloud compute → Functions Region → Singapore** and redeploy after changing region or environment variables. Region availability depends on the Netlify plan. Resend's closest currently offered APAC send region is Tokyo, not Singapore.
-
-Add the private variables from Step 1 in the Netlify site's environment-variable settings for the deploy contexts you use. Redeploy after changing them.
-
-## 5. Lifecycle email functions
-
-`src/server/email/resend.ts` exports typed OTP, KYC status, trial-expiry (trial days 60/75/85), and medical-shop enquiry email functions. The current KYC, subscription, and enquiry screens are demo-backed; connect these functions only when their corresponding database-backed events are implemented.
-
-## 6. Verify
-
-1. Confirm Resend shows the domain as verified and Supabase SMTP settings are saved.
-2. Check that the target approved email exists in Supabase Auth and PostgreSQL.
-3. Request an OTP from `/login`; confirm the email contains a six-digit code and no magic-link button.
-4. Enter the code before the 10-minute expiry; confirm the user reaches the role-specific protected page.
-5. Confirm the `cp_session` cookie is HttpOnly, SameSite=Strict, Secure in production, and refreshed on protected requests with a 30-day rolling expiry.
+Run `npm run dev:preview` and open `/login.html` on the same computer to preview distributor and retailer portals without email authentication. This mode is enabled only by that development command, only for loopback requests, and all API write requests are rejected. It uses synthetic preview accounts and cannot be enabled when `NODE_ENV=production`.

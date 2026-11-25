@@ -14,15 +14,29 @@ CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   role account_role NOT NULL,
   email VARCHAR(320) UNIQUE NOT NULL,
+  password_hash VARCHAR(255),
   phone VARCHAR(20) UNIQUE,
   full_name TEXT NOT NULL,
   status account_status NOT NULL DEFAULT 'pending',
+  session_version INTEGER NOT NULL DEFAULT 0,
   phone_verified BOOLEAN NOT NULL DEFAULT FALSE,
   email_verified BOOLEAN NOT NULL DEFAULT FALSE,
   consent_accepted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE auth_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(64) NOT NULL UNIQUE,
+  purpose VARCHAR(32) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_auth_tokens_user_purpose ON auth_tokens (user_id, purpose);
 
 CREATE TABLE suppliers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

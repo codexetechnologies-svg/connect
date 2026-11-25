@@ -1,24 +1,25 @@
 # Connect Pharma
 
-A Netlify-first Next.js marketplace for wholesale medicine comparison and supplier discovery.
+The active local application is an Express HTML marketplace served from `web/`. This repository also contains a separate Next.js prototype.
 
-This workspace contains a Next.js marketplace prototype for wholesale medicine search, supplier catalogue management, enquiry handling, KYC review, revenue reporting, and plan selection. The interface remains partially demo-backed and is not production-ready.
+`npm run dev` starts the Express app. The Vercel and Netlify deployment sections and `netlify.toml` target the separate Next.js prototype; they do not deploy the active Express app. Neither app should be treated as production-ready without verifying its own deployment and configuration.
 
 ## Production-readiness status
 
-- Clerk is the active identity provider. `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` are required. Protected pages require a verified Clerk email that matches an approved PostgreSQL `users` record; server-side route layouts enforce account roles.
-- Supabase OTP actions and setup instructions remain as legacy, unused code. They are not the current sign-in flow and must not be used to provision production accounts.
-- `GET /api/health` reports database connectivity and whether Clerk, email delivery, rate limiting, private storage, and payments are configured; it does not return credential values.
-- `POST /api/kyc/submit` returns `503`; private Cloudflare R2 document storage has not yet been connected. Cashfree payments and database-backed catalogue, enquiries, approvals, and subscriptions are also not implemented yet.
+- Authentication uses one email/password sign-in for supplier, medical shop, and admin accounts. Public registration is limited to suppliers and medical shops; new accounts are activated after email verification. Admin accounts must be provisioned by an operator.
+- The HTML app includes role-specific admin navigation, account lifecycle actions, plan management, private KYC review, and Cashfree checkout wiring. These workflows require the manual migration and provider configuration described in [Admin, billing, and KYC workflows](./docs/admin-workflows.md).
+- `GET /api/health` reports database connectivity, missing admin workflow schema objects, and Cashfree/R2/Supabase Auth deletion configuration; it never returns credential values.
+- Admin account deletion suspends access, removes linked Supabase Auth and private R2 KYC data, and preserves settled payment records without an account link. It requires migration 0003 plus server-only `SUPABASE_SERVICE_ROLE_KEY`; failed cleanup remains retryable.
+- GST invoicing, automated recurring charges, and document malware scanning are not implemented. Do not launch live billing or KYC collection until operational policies and provider configuration are reviewed.
 - `database/schema.sql` is a schema reference. The OTP index/attempt-count migration is in `database/migrations/0001_otp_verifications_index.sql`; review it and back up the database before applying. Migrations are never run automatically.
 
-Production readiness is not complete. Do not collect KYC documents, take payments, or launch real marketplace operations until the remaining integrations and workflows are implemented and tested.
+Production readiness is not complete. Review and back up the database before applying migration 0003, configure sandbox providers before exercising integrations, and review security, privacy, tax, and operational policies before production use.
 
-Configure Clerk and PostgreSQL in `.env.local` and the Netlify environment settings; never commit secrets. The Resend, Upstash, and Supabase OTP setup in [Email OTP and Resend setup](./docs/auth-email-setup.md) is legacy documentation and does not configure the active Clerk login.
+The separate Next.js prototype uses PostgreSQL, a unique `SESSION_SECRET`, Resend, and Upstash. The active Express HTML app uses Supabase Auth instead; see [Authentication and account registration](./docs/auth-email-setup.md) for its setup. Never commit secrets.
 
 ## Local development and browser tests
 
-Create `.env.local` using [.env.example](./.env.example). Generate a unique `SESSION_SECRET` of at least 32 characters with:
+Create `.env.local` using [.env.example](./.env.example). For the separate Next.js prototype, generate a unique `SESSION_SECRET` of at least 32 characters with:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
@@ -29,7 +30,11 @@ npm run dev
 npm run test:e2e
 ```
 
+To preview the distributor and retailer portals locally without email authentication, run `npm run dev:preview` and open `http://localhost:4000/login.html`. The preview is restricted to loopback requests, read-only, and unavailable in production.
+
 `npm run typecheck` runs the TypeScript check. Keep `.env.local` private and never reuse a local secret in production.
+
+The `npm run dev` Express HTML app uses Supabase Auth for sign-in and registration. Public sign-up creates a pending PostgreSQL `users` row with the selected supplier or medical shop role; email verification automatically activates the account. Configure `SUPABASE_URL`, `SUPABASE_ANON_KEY` (or `SUPABASE_PUBLISHABLE_KEY`), `PUBLIC_APP_URL`, `DATABASE_URL`, and both Upstash variables. Allow `${PUBLIC_APP_URL}/login.html?verified=1` in Supabase's Auth redirect URL settings, and apply `database/migrations/0003_admin_billing_kyc.sql` before enabling signup. Private supplier/admin APIs fail closed until authentication is configured. Public search and map APIs are rate-limited; `robots.txt` is only a crawler hint, not an access-control mechanism. When deployed behind a reverse proxy, set `TRUST_PROXY_HOPS` to the trusted proxy count so rate limits use client addresses correctly. For production, set `NODE_ENV=production` and enforce HTTPS at the Express host or trusted proxy; the app adds HSTS in production and marks auth cookies `Secure` unless it is explicitly running in development.
 
 The Playwright tests start the development server when needed. Install its Chromium browser once if it is not already available:
 
@@ -37,11 +42,33 @@ The Playwright tests start the development server when needed. Install its Chrom
 npx playwright install chromium
 ```
 
-Before users can enter protected pages, configure Clerk and a reachable PostgreSQL database, and provision matching approved application accounts. Self-service sign-up is not yet connected to app-account/KYC provisioning.
+Apply `database/migrations/0003_admin_billing_kyc.sql` to the production database before enabling registration if it has not already been applied. Provision admin accounts through a controlled operator workflow; public registration does not allow admin roles.
 
 Catalogue imports accept CSV files with `medicine, composition, brand, pack, basePrice, stock` columns. Catalogue, enquiry, approval, and plan actions are still demo-only.
 
+## Deploying to Vercel
+
+This section is for the separate Next.js prototype; it is distinct from the Express HTML app used by `npm run dev`.
+
+Use `npm run build` as the Vercel build command. No Clerk credentials are needed. Authentication secrets are read at runtime, so missing configuration will prevent authentication but will not block compilation.
+
+In the Vercel project settings, add these environment variables for every deployment environment you use:
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | Use the production PostgreSQL connection string. URL-encode reserved characters in credentials. |
+| `SESSION_SECRET` | Yes | Generate at least 32 random bytes; use a different secret per environment. |
+| `RESEND_API_KEY` | Yes | Used for email verification and password reset messages. |
+| `EMAIL_FROM` | Yes | A sender address verified with Resend. |
+| `UPSTASH_REDIS_REST_URL` | Yes | Shared production rate limiting for sign-in and email requests. |
+| `UPSTASH_REDIS_REST_TOKEN` | Yes | Keep private. |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | For the map | Restrict the browser key to your production site origin and the Maps JavaScript API. |
+
+Apply `database/migrations/0002_password_auth.sql` before enabling the Next.js prototype's password-auth flow. After changing environment variables, redeploy; existing deployments do not pick up changed values.
+
 ## Deploying to Netlify
+
+This section is for the separate Next.js prototype; it is distinct from the Express HTML app used by `npm run dev`.
 
 Connect this repository to Netlify and use the settings in `netlify.toml`: `npm run build`, publish directory `.next`, and the Next.js plugin. Keep `output: 'standalone'` in `next.config.ts`; the configured Netlify plugin uses that build output. Do not configure this app as a static export.
 
@@ -49,14 +76,17 @@ Set these site environment variables in the Netlify UI for the deploy contexts y
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Yes | Use the production Clerk instance key. This is read during the build. |
-| `CLERK_SECRET_KEY` | Yes | Keep server-side; never expose it with a `NEXT_PUBLIC_` prefix. |
+| `SESSION_SECRET` | Yes | Generate at least 32 random bytes; use a different secret per environment. |
 | `DATABASE_URL` | Yes | Use the production Supabase PostgreSQL connection string, not the local/test database. URL-encode reserved characters in credentials. |
+| `RESEND_API_KEY` | Yes | Used for email verification and password reset messages. |
+| `EMAIL_FROM` | Yes | A sender address verified with Resend. |
+| `UPSTASH_REDIS_REST_URL` | Yes | Shared production rate limiting for sign-in and email requests. |
+| `UPSTASH_REDIS_REST_TOKEN` | Yes | Keep private. |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | For the map | Restrict the browser key to your production site origin and the Maps JavaScript API. |
 
-Use the production Clerk instance's configured domain. If it uses a custom frontend API domain, add that origin to the `script-src` and `frame-src` directives in `netlify.toml`. Keep secrets in Netlify's environment settings; do not commit them or copy `.env.local` into the repository.
+Apply `database/migrations/0002_password_auth.sql` before enabling the Next.js prototype's password-auth flow. Keep secrets in Netlify's environment settings; do not commit them or copy `.env.local` into the repository.
 
-The development database setup does not provision production. Before deploying protected pages, create the production auth schema and an approved `users` record whose email matches the user's verified primary Clerk email. `database/schema.sql` is a reference with known schema drift, not a production migration; review and apply only deliberate migrations.
+The development database setup does not provision production. Before deploying protected pages, create an approved admin `users` record. `database/schema.sql` is a reference with known schema drift; apply deliberate migrations rather than pushing the full reference schema.
 
 After deployment, check `/api/health`. Its database check reports connection status, but the endpoint returns `503` until all readiness checks pass, including email, rate limiting, storage, and payments. Those integrations are not all implemented yet, so a `503` does not by itself mean the database connection failed.
 

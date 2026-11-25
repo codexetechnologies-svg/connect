@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Catalogue — Connect Pharma</title>
+<link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+<div id="site-header"></div>
+<main class="container page-shell">
+  <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="page-eyebrow">Supplier portal</p>
+      <h1 class="page-title">Catalogue and pricing</h1>
+      <p class="mt-2 text-sm text-slate-600" id="sku-usage" aria-live="polite"></p>
+    </div>
+    <div class="flex min-w-0 flex-col items-start gap-2 sm:items-end">
+      <input id="csv" type="file" accept=".csv,.xlsx,.xls,text/csv" class="hidden" />
+      <div class="flex flex-wrap gap-2">
+        <button class="btn btn-primary" id="add-toggle" type="button">Add product</button>
+        <button class="btn btn-success" id="import" type="button">Import CSV / Excel</button>
+      </div>
+      <p class="text-xs text-slate-500 sm:text-right">Required columns: Product name, Brand name, Manufacturer, Composition/Salt, Strength, Dosage form, Pack size, MRP, Selling price, GST, Scheme/Discount, Stock availability, Batch, Expiry, Status</p>
+    </div>
+  </header>
+  <p class="notice hidden" id="import-msg" role="status"></p>
+
+  <section class="card mb-6 hidden" id="add-panel">
+    <div class="border-b bg-slate-50 px-6 py-4"><h2 class="text-xl font-semibold text-slate-900">Add a product</h2></div>
+    <form id="add-form" class="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
+      <label class="field-label">Product name *<input class="form-control" name="medicineName" required maxlength="200" /></label>
+      <label class="field-label">Brand name<input class="form-control" name="brandName" maxlength="200" /></label>
+      <label class="field-label">Manufacturer *<input class="form-control" name="manufacturer" required maxlength="200" /></label>
+      <label class="field-label">Composition / Salt *<input class="form-control" name="composition" required maxlength="300" placeholder="e.g. Paracetamol" /></label>
+      <label class="field-label">Strength *<input class="form-control" name="strength" required maxlength="100" placeholder="e.g. 650mg" /></label>
+      <label class="field-label">Dosage form *<input class="form-control" name="dosageForm" required maxlength="40" placeholder="e.g. Tablet" /></label>
+      <label class="field-label">Pack size *<input class="form-control" name="packSize" required maxlength="100" placeholder="e.g. Strip of 15" /></label>
+      <label class="field-label">MRP (₹) *<input class="form-control" name="mrp" type="number" min="0" step="0.01" required /></label>
+      <label class="field-label">Selling price (₹) *<input class="form-control" name="sellingPrice" type="number" min="0" step="0.01" required /></label>
+      <label class="field-label">GST % *<input class="form-control" name="gstPercentage" type="number" min="0" max="100" step="0.01" value="12" required /></label>
+      <label class="field-label">Scheme / Discount<input class="form-control" name="schemes" maxlength="500" placeholder="e.g. 10% off on 10+ strips" /></label>
+      <label class="field-label">Stock availability
+        <select class="form-control" name="stockStatus">
+          <option value="in_stock">In Stock</option>
+          <option value="low_stock">Low Stock</option>
+          <option value="out_of_stock">Out of Stock</option>
+        </select>
+      </label>
+      <label class="field-label">Available quantity<input class="form-control" name="availableQuantity" type="number" min="0" step="1" value="0" /></label>
+      <label class="field-label">Batch number *<input class="form-control" name="batchNumber" required maxlength="100" /></label>
+      <label class="field-label">Expiry date *<input class="form-control" name="batchExpiryDate" type="date" required /></label>
+      <label class="field-label">Status
+        <select class="form-control" name="isActive">
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+      </label>
+      <label class="field-label">Minimum order qty<input class="form-control" name="minimumOrderQuantity" type="number" min="1" step="1" value="1" /></label>
+      <label class="field-label">Delivery charges (₹)<input class="form-control" name="deliveryCharges" type="number" min="0" step="0.01" value="0" /></label>
+      <label class="field-label">Estimated delivery<input class="form-control" name="estimatedDelivery" maxlength="100" placeholder="e.g. 2-3 days" /></label>
+      <div class="flex items-end gap-3 sm:col-span-2 lg:col-span-3">
+        <button class="btn btn-primary" type="submit">Save product</button>
+        <button class="btn btn-secondary" type="button" id="add-cancel">Cancel</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="card overflow-hidden">
+    <div class="border-b bg-slate-50 px-6 py-4"><h2 class="text-xl font-semibold text-slate-900">Active medicine SKUs</h2></div>
+    <div id="table-area"></div>
+  </div>
+</main>
+<script src="/assets/app.js"></script>
+<script src="/assets/vendor/xlsx.full.min.js"></script>
+<script>
+const tableArea = document.getElementById('table-area');
+const msg = document.getElementById('import-msg');
+const skuUsage = document.getElementById('sku-usage');
+const addPanel = document.getElementById('add-panel');
+const addForm = document.getElementById('add-form');
+let catalogue = [];
+
+function showMsg(text, type) {
+  msg.textContent = text;
+  msg.className = `notice ${type}`;
+}
+
+function stockBadge(s) {
+  const cls = s === 'in_stock' ? 'green' : s === 'low_stock' ? 'amber' : 'red';
+  const label = s === 'in_stock' ? 'In Stock' : s === 'low_stock' ? 'Low Stock' : 'Out of Stock';
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function statusBadge(active) {
+  return `<span class="badge ${active ? 'green' : 'slate'}">${active ? 'Active' : 'Inactive'}</span>`;
+}
+
+function fmtMoney(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? '₹' + n.toFixed(2) : '—';
+}
+
+function fmtDate(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toLocaleDateString();
+}
+
+function rowHtml(r) {
+  return `<tr>
+    <td class="font-medium text-slate-900">${esc(r.medicineName)}</td>
+    <td class="text-slate-700">${esc(r.genericName || '')}</td>
+    <td class="text-slate-700">${esc(r.brandName || '—')}</td>
+    <td class="text-slate-700">${esc(r.manufacturer || '—')}</td>
+    <td class="text-slate-700">${esc(r.strength || '—')}</td>
+    <td class="text-slate-700">${esc(r.packSize || '—')}</td>
+    <td class="mono text-slate-900">${fmtMoney(r.mrp)}</td>
+    <td class="mono text-slate-900">${fmtMoney(r.wholesalePrice)}</td>
+    <td class="text-slate-700">${esc(r.gstPercentage)}%</td>
+    <td class="text-slate-700">${esc(r.schemes || '—')}</td>
+    <td class="text-slate-700">${esc(r.batchNumber || '—')}</td>
+    <td class="text-slate-700">${fmtDate(r.batchExpiryDate)}</td>
+    <td>${stockBadge(r.stockStatus)}</td>
+    <td>${statusBadge(r.isActive)}</td>
+    <td><button class="btn btn-secondary btn-sm" data-delete="${esc(r.id)}">Delete</button></td>
+  </tr>`;
+}
+
+function render() {
+  if (!catalogue.length) {
+    tableArea.innerHTML = '<div class="px-6 py-8 text-center text-slate-500">No catalogue items yet. Add a product or import a CSV/Excel file to get started.</div>';
+    return;
+  }
+  tableArea.innerHTML = `<div class="table-wrap"><table class="data-table">
+    <thead><tr>
+      <th>Medicine</th><th>Composition</th><th>Brand</th><th>Manufacturer</th><th>Strength</th><th>Pack</th>
+      <th>MRP</th><th>Price</th><th>GST</th><th>Scheme</th><th>Batch</th><th>Expiry</th><th>Stock</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>${catalogue.map(rowHtml).join('')}</tbody></table></div>`;
+
+  tableArea.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!window.confirm('Delete this catalogue item?')) return;
+    try {
+      await api(`/api/supplier/catalogue/${btn.dataset.delete}`, { method: 'DELETE' });
+      await loadAll();
+    } catch (e) {
+      showMsg(e instanceof Error ? e.message : 'Could not delete the item.', 'error');
+    }
+  }));
+}
+
+async function loadUsage() {
+  try {
+    const usage = await api('/api/supplier/catalogue/usage');
+    skuUsage.textContent = `${usage.activeSkus} of ${usage.skuLimit} active SKUs used (${usage.tier} plan)`;
+  } catch (e) {
+    skuUsage.textContent = '';
+  }
+}
+
+async function loadAll() {
+  tableArea.innerHTML = '<div class="px-6 py-8 text-center text-slate-500">Loading catalogue...</div>';
+  try { catalogue = await api('/api/supplier/catalogue'); }
+  catch (e) { console.error(e); catalogue = []; }
+  render();
+  loadUsage();
+}
+
+// ---------- add product ----------
+document.getElementById('add-toggle').addEventListener('click', () => addPanel.classList.toggle('hidden'));
+document.getElementById('add-cancel').addEventListener('click', () => addPanel.classList.add('hidden'));
+
+addForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = new FormData(addForm);
+  const payload = {
+    medicineName: data.get('medicineName'),
+    brandName: data.get('brandName'),
+    manufacturer: data.get('manufacturer'),
+    composition: data.get('composition'),
+    strength: data.get('strength'),
+    dosageForm: data.get('dosageForm'),
+    packSize: data.get('packSize'),
+    mrp: data.get('mrp'),
+    sellingPrice: data.get('sellingPrice'),
+    gstPercentage: data.get('gstPercentage'),
+    schemes: data.get('schemes'),
+    stockStatus: data.get('stockStatus'),
+    availableQuantity: data.get('availableQuantity'),
+    batchNumber: data.get('batchNumber'),
+    batchExpiryDate: data.get('batchExpiryDate'),
+    isActive: data.get('isActive') === 'true',
+    minimumOrderQuantity: data.get('minimumOrderQuantity'),
+    deliveryCharges: data.get('deliveryCharges'),
+    estimatedDelivery: data.get('estimatedDelivery')
+  };
+  try {
+    await api('/api/supplier/catalogue', { method: 'POST', body: JSON.stringify(payload) });
+    addForm.reset();
+    addPanel.classList.add('hidden');
+    showMsg('Product saved to your catalogue.', 'ok');
+    await loadAll();
+  } catch (err) {
+    showMsg(err instanceof Error ? err.message : 'Could not save the product.', 'error');
+  }
+});
+
+// ---------- CSV / Excel import ----------
+function parseCsvLine(text) {
+  const rows = []; let row = [], cell = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(cell.trim()); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell.trim());
+      if (row.some(v => v.length > 0)) rows.push(row);
+      row = []; cell = '';
+    } else cell += ch;
+  }
+  if (quoted) throw new Error('CSV contains an unclosed quoted field.');
+  row.push(cell.trim());
+  if (row.some(v => v.length > 0)) rows.push(row);
+  return rows;
+}
+
+const HEADER_ALIASES = {
+  productname: 'medicineName', medicinename: 'medicineName', medicine: 'medicineName', name: 'medicineName', product: 'medicineName',
+  brandname: 'brandName', brand: 'brandName',
+  manufacturer: 'manufacturer', maker: 'manufacturer', mfg: 'manufacturer',
+  compositionsalt: 'composition', composition: 'composition', salt: 'composition', genericname: 'composition', generic: 'composition', compositionandsalt: 'composition',
+  strength: 'strength',
+  dosageform: 'dosageForm', form: 'dosageForm', dosage: 'dosageForm', dosageformtype: 'dosageForm',
+  packsize: 'packSize', pack: 'packSize', pack: 'packSize',
+  mrp: 'mrp',
+  sellingprice: 'sellingPrice', price: 'sellingPrice', baseprice: 'sellingPrice', wholesaleprice: 'sellingPrice', rate: 'sellingPrice', sellprice: 'sellingPrice',
+  gst: 'gstPercentage', gstpercentage: 'gstPercentage', gstpercent: 'gstPercentage',
+  schemesdiscount: 'schemes', scheme: 'schemes', discount: 'schemes', schemes: 'schemes', offer: 'schemes',
+  stockavailability: 'stockStatus', stock: 'stockStatus', stockstatus: 'stockStatus', availability: 'stockStatus',
+  batch: 'batchNumber', batchnumber: 'batchNumber', lot: 'batchNumber', lotnumber: 'batchNumber',
+  expiry: 'batchExpiryDate', expirydate: 'batchExpiryDate', batchexpiry: 'batchExpiryDate', batchexpirydate: 'batchExpiryDate', expdate: 'batchExpiryDate',
+  status: 'isActive', active: 'isActive',
+  availablequantity: 'availableQuantity', quantity: 'availableQuantity', stockquantity: 'availableQuantity',
+  minimumorderquantity: 'minimumOrderQuantity', moq: 'minimumOrderQuantity',
+  deliverycharges: 'deliveryCharges',
+  estimateddelivery: 'estimatedDelivery', delivery: 'estimatedDelivery'
+};
+
+function normalizeHeader(h) {
+  return String(h || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function normalizeExpiry(value) {
+  const v = String(value || '').trim();
+  let m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return v;
+  m = v.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (m) {
+    const [, d, mo, y] = m;
+    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  return v;
+}
+
+function normalizeStockStatus(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (v === 'in_stock' || v === 'in stock' || v === 'instock' || v === 'available' || v === 'yes') return 'in_stock';
+  if (v === 'low_stock' || v === 'low stock' || v === 'lowstock' || v === 'limited') return 'low_stock';
+  if (v === 'out_of_stock' || v === 'out of stock' || v === 'outofstock' || v === 'no' || v === 'unavailable') return 'out_of_stock';
+  return v;
+}
+
+function normalizeActive(value) {
+  const v = String(value ?? '').trim().toLowerCase();
+  if (['inactive', 'no', 'false', '0', 'disabled'].includes(v)) return false;
+  return true;
+}
+
+function rowsToItems(headerRow, dataRows) {
+  const headers = headerRow.map(normalizeHeader);
+  const mapped = headers.map(h => HEADER_ALIASES[h] || null);
+  const required = ['medicineName', 'manufacturer', 'composition', 'strength', 'dosageForm', 'packSize', 'mrp', 'sellingPrice', 'gstPercentage', 'batchNumber', 'batchExpiryDate'];
+  const missing = required.filter(f => !mapped.includes(f));
+  if (missing.length) {
+    throw new Error(`Missing required column(s): ${missing.join(', ')}. Expected headers like Product name, Composition/Salt, MRP, Selling price, GST, Batch, Expiry.`);
+  }
+  return dataRows.map((r, i) => {
+    const item = {};
+    mapped.forEach((field, col) => {
+      if (!field) return;
+      let v = r[col];
+      if (v === undefined || v === null) v = '';
+      if (typeof v === 'number' && Number.isFinite(v)) v = String(v);
+      v = String(v).trim();
+      if (field === 'batchExpiryDate') v = normalizeExpiry(v);
+      if (field === 'stockStatus') v = normalizeStockStatus(v);
+      if (field === 'isActive') v = normalizeActive(v);
+      item[field] = v;
+    });
+    item._row = i + 2;
+    return item;
+  });
+}
+
+document.getElementById('import').addEventListener('click', () => document.getElementById('csv').click());
+document.getElementById('csv').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  msg.classList.add('hidden');
+  if (!file) return;
+  try {
+    const name = file.name.toLowerCase();
+    let table;
+    if (name.endsWith('.csv') || name.endsWith('.txt')) {
+      table = parseCsvLine(await file.text());
+    } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      if (typeof XLSX === 'undefined') throw new Error('Excel reader failed to load. Try exporting as CSV.');
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      table = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+    } else {
+      throw new Error('Please choose a .csv or .xlsx/.xls file.');
+    }
+    if (!table.length) throw new Error('The file is empty.');
+    const headerRow = table.shift();
+    const items = rowsToItems(headerRow, table);
+    if (!items.length) throw new Error('The file has headers but no data rows.');
+
+    showMsg(`Importing ${items.length} row${items.length === 1 ? '' : 's'}…`, 'info');
+    const payload = items.map(({ _row, ...rest }) => rest);
+    const result = await api('/api/supplier/catalogue/import', {
+      method: 'POST',
+      body: JSON.stringify({ items: payload })
+    });
+    if (result.failed === 0) {
+      showMsg(`Imported ${result.created} product${result.created === 1 ? '' : 's'} into your catalogue.`, 'ok');
+    } else {
+      const firstErrors = (result.errors || []).slice(0, 5)
+        .map(err => `Row ${err.row}: ${err.errors.join('; ')}`)
+        .join(' | ');
+      showMsg(`Imported ${result.created}, failed ${result.failed}. ${firstErrors}`, result.created ? 'info' : 'error');
+    }
+    await loadAll();
+  } catch (err) {
+    showMsg(err instanceof Error ? err.message : 'Import failed.', 'error');
+  }
+});
+
+loadAll();
+</script>
+</body>
+</html>
